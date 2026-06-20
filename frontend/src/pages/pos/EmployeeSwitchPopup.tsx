@@ -3,22 +3,23 @@ import { useCatalogStore } from '../../store/catalogStore';
 import { useAuthStore } from '../../store/authStore';
 import { Badge } from '../../components/ui';
 import { toast } from '../../components/ui/Toast';
+import { useNavigate } from 'react-router-dom';
 
 export function EmployeeSwitchPopup({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { employees } = useCatalogStore();
-  const { login, user } = useAuthStore();
+  const { clearSession, user } = useAuthStore();
+  const navigate = useNavigate();
 
   if (!open) return null;
 
   const activeEmps = employees.filter((e) => e.active && !e.archived);
 
   const switchTo = (emp: typeof activeEmps[0]) => {
-    login(
-      { id: emp.id, name: emp.name, email: emp.email, role: emp.role },
-      `token-${emp.id}-${Date.now()}`
-    );
-    toast.success(`Switched to ${emp.name}.`);
+    if (user?.id === emp.id) return onClose();
+    clearSession();
+    toast.info(`Sign in as ${emp.name} to switch cashier.`);
     onClose();
+    navigate('/login');
   };
 
   return (

@@ -42,15 +42,22 @@ export function OrdersListPage() {
   const handleEditOrder = (order: Order) => {
     if (order.status !== 'draft') return;
     // Load order items into cart and navigate to POS
-    const cartItems = order.items.map((i, idx) => ({
-      id: `edit-${idx}-${Date.now()}`,
+    const cartItems = order.items.map((i) => ({
+      id: i.productId ?? '',
       name: i.name,
       price: i.price,
       qty: i.qty,
     }));
-    loadOrder(cartItems, order.tableLabel, order.customer ? { id: 'cu-edit', name: order.customer } : null);
-    // Remove the old draft order
-    deleteOrder(order.id);
+    loadOrder(
+      cartItems,
+      order.tableId ?? null,
+      order.tableLabel,
+      order.customer && order.customerId
+        ? { id: order.customerId, name: order.customer }
+        : null,
+      order.id,
+      order.orderNum
+    );
     toast.info(`Editing ${order.orderNum} — items loaded into cart.`);
     navigate('/pos');
   };

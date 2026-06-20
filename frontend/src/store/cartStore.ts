@@ -13,11 +13,14 @@ export interface CartItem {
 }
 
 interface CartState {
+  orderId: string | null;
+  orderNumber: string | null;
   tableId: string | null;
   tableLabel: string | null;
   customer: { id: string; name: string } | null;
   coupon: { code: string; type: 'percent' | 'flat'; value: number } | null;
   items: CartItem[];
+  setOrder: (id: string, orderNumber: string) => void;
   setTable: (id: string, label: string) => void;
   setCustomer: (c: { id: string; name: string } | null) => void;
   addItem: (item: Omit<CartItem, 'qty'>) => void;
@@ -26,15 +29,25 @@ interface CartState {
   applyCoupon: (c: CartState['coupon']) => void;
   applyItemDiscount: (id: string, type: 'percent' | 'flat', value: number) => void;
   clearCart: () => void;
-  loadOrder: (items: CartItem[], tableLabel: string | null, customer: { id: string; name: string } | null) => void;
+  loadOrder: (
+    items: CartItem[],
+    tableId: string | null,
+    tableLabel: string | null,
+    customer: { id: string; name: string } | null,
+    orderId?: string,
+    orderNumber?: string
+  ) => void;
 }
 
 export const useCartStore = create<CartState>((set) => ({
+  orderId: null,
+  orderNumber: null,
   tableId: null,
   tableLabel: null,
   customer: null,
   coupon: null,
   items: [],
+  setOrder: (orderId, orderNumber) => set({ orderId, orderNumber }),
   setTable: (tableId, tableLabel) => set({ tableId, tableLabel }),
   setCustomer: (customer) => set({ customer }),
   addItem: (item) =>
@@ -68,9 +81,17 @@ export const useCartStore = create<CartState>((set) => ({
       }),
     })),
   clearCart: () =>
-    set({ items: [], customer: null, coupon: null }),
-  loadOrder: (items, tableLabel, customer) =>
-    set({ items, tableLabel, tableId: tableLabel ? `t-load` : null, customer, coupon: null }),
+    set({ orderId: null, orderNumber: null, items: [], customer: null, coupon: null }),
+  loadOrder: (items, tableId, tableLabel, customer, orderId = undefined, orderNumber = undefined) =>
+    set({
+      items,
+      tableId,
+      tableLabel,
+      customer,
+      coupon: null,
+      orderId: orderId ?? null,
+      orderNumber: orderNumber ?? null,
+    }),
 }));
 
 export function cartSubtotal(items: CartItem[]): number {

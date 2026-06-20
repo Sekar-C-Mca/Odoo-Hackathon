@@ -4,26 +4,29 @@ import { ArrowLeft, Check, QrCode as QrIcon, Mail } from 'lucide-react';
 import { Button, Input, SectionLabel } from '../../components/ui';
 import { useCartStore, cartTotals } from '../../store/cartStore';
 import { useCatalogStore } from '../../store/catalogStore';
-import { useAuthStore } from '../../store/authStore';
-import { useKDSStore } from '../../store/kdsStore';
 import { ReceiptEmailModal } from './ReceiptEmailModal';
 import { toast } from '../../components/ui/Toast';
+import { api } from '../../api/client';
+import type { OrderDto } from '../../api/contracts';
+import { useSessionStore } from '../../store/sessionStore';
 
 type Method = 'cash' | 'upi' | 'card';
 
 export function PaymentScreen() {
   const navigate = useNavigate();
-  const { items, tableLabel, coupon, customer, clearCart } = useCartStore();
-  const { addOrder, updateOrder, orders } = useCatalogStore();
-  const addTicket = useKDSStore((s) => s.addTicket);
-  const user = useAuthStore((s) => s.user);
+  const { orderId, items, tableId, tableLabel, coupon, customer, clearCart, setOrder } = useCartStore();
+  const { paymentMethods, refreshOrders } = useCatalogStore();
+  const sessionId = useSessionStore((s) => s.sessionId);
   const totals = useMemo(() => cartTotals(items, coupon), [items, coupon]);
   const [method, setMethod] = useState<Method>('cash');
   const [cash, setCash] = useState('');
   const [cardRef, setCardRef] = useState('');
   const [done, setDone] = useState(false);
   const [orderNum, setOrderNum] = useState('');
+  const [paidOrderId, setPaidOrderId] = useState<string | null>(null);
+  const [paidTotal, setPaidTotal] = useState(0);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   if (items.length === 0 && !done) {
     return (
@@ -37,47 +40,63 @@ export function PaymentScreen() {
 
   const change = cash ? Number(cash) - totals.total : 0;
 
-  const finalize = (pm: Method) => {
-    const num = `#${String(Math.floor(Math.random() * 9000) + 1000)}`;
-    setOrderNum(num);
-
-    // Check if there's already a draft order for this (from "Send to kitchen")
-    // If so, update it to paid status. Otherwise, create a new order.
-    const existingDraft = orders.find(
-      (o) => o.status === 'draft' && o.tableLabel === tableLabel && tableLabel !== null
-    );
-
-    if (existingDraft) {
-      updateOrder(existingDraft.id, {
-        status: 'paid',
-        total: totals.total,
-        paymentMethod: pm,
-        employeeName: user?.name,
-        items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, discount: i.discount })),
-      });
-    } else {
-      addOrder({
-        id: `o-${Date.now()}`,
-        orderNum: num,
-        tableLabel,
-        status: 'paid',
-        total: totals.total,
-        customer: customer?.name,
-        employeeName: user?.name,
-        items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, discount: i.discount })),
-        createdAt: new Date().toISOString(),
-        paymentMethod: pm,
-      });
-      addTicket({
-        id: `k-${Date.now()}`,
-        orderNum: num,
-        tableLabel: tableLabel ?? 'Takeaway',
-        items: items.map((i) => ({ id: i.id, name: i.name, qty: i.qty, done: false })),
-      });
+  const finalize = async (pm: Method) => {
+    if (!sessionId) {
+      toast.error('Open a POS session before accepting payment.');
+      return;
     }
-    toast.success(`${existingDraft ? existingDraft.orderNum : num} paid via ${pm}.`);
-    clearCart();
-    setDone(true);
+    const paymentMethod = paymentMethods.find((item) => item.type === pm && item.enabled);
+    if (!paymentMethod) {
+      toast.error(`${pm.toUpperCase()} is not enabled in payment methods.`);
+      return;
+    }
+    setPaying(true);
+    try {
+      let draft: OrderDto;
+      if (orderId) {
+        draft = await api<OrderDto>(`/api/orders/${orderId}`);
+      } else {
+        draft = await api<OrderDto>(
+          `/api/orders?sessionId=${sessionId}${tableId ? `&tableId=${tableId}` : ''}`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              customerId: customer ? Number(customer.id) : null,
+              lines: items.map((item) => ({
+                productId: Number(item.id),
+                quantity: item.qty,
+              })),
+            }),
+          }
+        );
+        setOrder(String(draft.id), draft.orderNumber);
+      }
+      if (coupon) {
+        draft = await api<OrderDto>(`/api/orders/${draft.id}/discount`, {
+          method: 'PUT',
+          body: JSON.stringify({ couponCode: coupon.code }),
+        });
+      }
+      const paid = await api<OrderDto>(`/api/orders/${draft.id}/payment`, {
+        method: 'POST',
+        body: JSON.stringify({
+          paymentMethodId: Number(paymentMethod.id),
+          amount: Number(draft.totalAmount),
+          referenceNumber: pm === 'card' ? cardRef || null : null,
+        }),
+      });
+      setPaidOrderId(String(paid.id));
+      setOrderNum(paid.orderNumber);
+      setPaidTotal(Number(paid.totalAmount));
+      await refreshOrders();
+      toast.success(`${paid.orderNumber} paid via ${pm}.`);
+      clearCart();
+      setDone(true);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Payment could not be completed.');
+    } finally {
+      setPaying(false);
+    }
   };
 
   if (done) {
@@ -86,7 +105,7 @@ export function PaymentScreen() {
         <div className="w-14 h-14 flex items-center justify-center text-paid mb-6"><Check size={56} strokeWidth={1.2} /></div>
         <div className="text-[14px] tracking-[0.28em] uppercase font-extralight text-text-muted mb-2">Payment complete</div>
         <div className="font-display font-light italic text-[clamp(48px,12vw,96px)] text-gold leading-none mb-6">{orderNum}</div>
-        <div className="text-[17px] font-light text-text-muted mb-8">Thank you. The kitchen has been notified.</div>
+        <div className="text-[17px] font-light text-text-muted mb-8">Thank you. The payment was recorded successfully.</div>
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
           <Button fullWidth size="md" onClick={() => navigate('/pos')}>New order</Button>
           <Button fullWidth variant="ghost" size="md" onClick={() => setEmailOpen(true)}>
@@ -98,7 +117,8 @@ export function PaymentScreen() {
           open={emailOpen}
           onClose={() => setEmailOpen(false)}
           orderNum={orderNum}
-          total={totals.total}
+          total={paidTotal}
+          orderId={paidOrderId}
         />
       </div>
     );
@@ -136,8 +156,8 @@ export function PaymentScreen() {
               <div className="font-display text-[44px] text-paid leading-none">₹{change}</div>
             </div>
           )}
-          <Button fullWidth size="lg" className="mt-8" disabled={!cash || Number(cash) < totals.total} onClick={() => finalize('cash')}>
-            Confirm payment
+          <Button fullWidth size="lg" className="mt-8" disabled={paying || !cash || Number(cash) < totals.total} onClick={() => void finalize('cash')}>
+            {paying ? 'Processing...' : 'Confirm payment'}
           </Button>
         </div>
       )}
@@ -146,14 +166,14 @@ export function PaymentScreen() {
         <div className="flex flex-col items-center">
           <div className="w-48 h-48 border border-border flex items-center justify-center text-gold mb-4"><QrIcon size={120} strokeWidth={1} /></div>
           <div className="text-[15px] tracking-[0.18em] uppercase font-extralight text-text-muted mb-6">Scan to pay ₹{totals.total}</div>
-          <Button fullWidth size="lg" onClick={() => finalize('upi')}>Confirm payment received</Button>
+          <Button fullWidth size="lg" disabled={paying} onClick={() => void finalize('upi')}>{paying ? 'Processing...' : 'Confirm payment received'}</Button>
         </div>
       )}
 
       {method === 'card' && (
         <div>
           <Input label="Reference number" value={cardRef} onChange={(e) => setCardRef(e.target.value)} placeholder="Optional" />
-          <Button fullWidth size="lg" className="mt-8" onClick={() => finalize('card')}>Confirm payment</Button>
+          <Button fullWidth size="lg" className="mt-8" disabled={paying} onClick={() => void finalize('card')}>{paying ? 'Processing...' : 'Confirm payment'}</Button>
         </div>
       )}
     </div>

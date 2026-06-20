@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Menu, LogOut, Printer, RefreshCw, Plus, User } from 'lucide-react';
+import { Menu, LogOut, Printer, RefreshCw, User } from 'lucide-react';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { MobileNavSheet } from '../../components/shared/MobileNavSheet';
 import { useAuthStore } from '../../store/authStore';
@@ -25,10 +25,10 @@ const mobileNavItems = [
 export function AdminLayout() {
   const [navOpen, setNavOpen] = useState(false);
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, clearSession } = useAuthStore();
 
   const handleLogout = () => {
-    logout();
+    clearSession();
     toast.info('Signed out.');
     navigate('/login');
   };

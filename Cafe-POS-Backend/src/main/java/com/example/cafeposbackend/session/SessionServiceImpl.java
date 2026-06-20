@@ -55,6 +55,15 @@ public class SessionServiceImpl implements SessionService {
     if (session.getStatus() != SessionStatus.OPEN) {
       throw new BusinessRuleException("Session is already closed");
     }
+    long openOrdersCount =
+        orderRepository.findAll().stream()
+            .filter(order -> order.getSession().getId().equals(sessionId))
+            .filter(order -> order.getStatus() == OrderStatus.DRAFT)
+            .count();
+    if (openOrdersCount > 0) {
+      throw new BusinessRuleException(
+          "Cannot close session: There are " + openOrdersCount + " open draft order(s)");
+    }
     List<Order> paid = orderRepository.findBySessionIdAndStatus(sessionId, OrderStatus.PAID);
     BigDecimal revenue =
         paid.stream().map(Order::getTotalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);

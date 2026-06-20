@@ -46,26 +46,34 @@ export function EmployeesPage() {
     setEditing(true);
     setDrawerOpen(true);
   };
-  const save = () => {
-    if (!draft.name.trim() || !draft.email.includes('@') || draft.pin.length < 4) {
-      toast.error('Name, valid email, and a 4+ digit PIN are required.');
+  const save = async () => {
+    if (!draft.name.trim() || !draft.email.includes('@') || (!editing && draft.pin.length < 8)) {
+      toast.error('Name, valid email, and an 8+ character password are required.');
       return;
     }
-    saveEmployee(draft);
-    toast.success(editing ? 'Employee updated.' : 'Employee added.');
-    setDrawerOpen(false);
+    try {
+      await saveEmployee(draft);
+      toast.success(editing ? 'Employee updated.' : 'Employee added.');
+      setDrawerOpen(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to save employee.');
+    }
   };
 
-  const handleChangePin = () => {
-    if (newPin.length < 4) {
-      toast.error('PIN must be at least 4 digits.');
+  const handleChangePin = async () => {
+    if (newPin.length < 8) {
+      toast.error('Password must be at least 8 characters.');
       return;
     }
     if (pinModal) {
-      changeEmployeePin(pinModal, newPin);
-      toast.success('Password changed.');
-      setPinModal(null);
-      setNewPin('');
+      try {
+        await changeEmployeePin(pinModal, newPin);
+        toast.success('Password changed.');
+        setPinModal(null);
+        setNewPin('');
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : 'Unable to change password.');
+      }
     }
   };
 
@@ -164,7 +172,7 @@ export function EmployeesPage() {
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setDrawerOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={save}>{editing ? 'Save' : 'Add'}</Button>
+            <Button size="sm" onClick={() => void save()}>{editing ? 'Save' : 'Add'}</Button>
           </>
         }
       >
@@ -176,7 +184,7 @@ export function EmployeesPage() {
               <option value="EMPLOYEE">Employee</option>
               <option value="ADMIN">Admin</option>
             </Select>
-            <Input label="PIN" type="password" value={draft.pin} onChange={(e) => setDraft({ ...draft, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} placeholder="••••" />
+            {!editing && <Input label="Password" type="password" value={draft.pin} onChange={(e) => setDraft({ ...draft, pin: e.target.value })} placeholder="Minimum 8 characters" />}
           </div>
           <label className="flex items-center gap-3 text-[17px] font-light text-text">
             <input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} className="accent-[#00754A]" />
@@ -193,7 +201,7 @@ export function EmployeesPage() {
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setPinModal(null)}>Cancel</Button>
-            <Button size="sm" onClick={handleChangePin}>Update password</Button>
+            <Button size="sm" onClick={() => void handleChangePin()}>Update password</Button>
           </>
         }
       >
@@ -201,7 +209,7 @@ export function EmployeesPage() {
           <p className="text-[16px] font-light text-text-muted">
             Enter a new PIN/password for {employees.find((e) => e.id === pinModal)?.name ?? 'this employee'}.
           </p>
-          <Input label="New password" type="password" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••" />
+          <Input label="New password" type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="Minimum 8 characters" />
         </div>
       </Modal>
 

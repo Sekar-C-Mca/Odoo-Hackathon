@@ -15,6 +15,12 @@ public final class UserDtos {
       @Size(min = 8) String password,
       @NotNull Role role) {}
 
+  public record UpdateUserRequest(
+      @NotBlank String name,
+      @Email @NotBlank String email,
+      @NotNull Role role,
+      @NotNull Boolean active) {}
+
   public record ChangePasswordRequest(@Size(min = 8) String password) {}
 
   public record UserResponse(Long id, String name, String email, Role role, boolean active) {}

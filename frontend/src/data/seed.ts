@@ -65,13 +65,15 @@ export interface PaymentMethod {
 export interface Order {
   id: string;
   orderNum: string;
+  tableId?: string | null;
   tableLabel: string | null;
   status: 'draft' | 'paid' | 'cancelled';
   total: number;
+  customerId?: string | null;
   customer?: string;
   employeeName?: string;
   sessionId?: string;
-  items: { name: string; qty: number; price: number; discount?: number }[];
+  items: { productId?: string; name: string; qty: number; price: number; discount?: number }[];
   createdAt: string;
   paymentMethod?: 'cash' | 'card' | 'upi';
 }

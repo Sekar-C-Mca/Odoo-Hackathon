@@ -147,24 +147,7 @@ public class OrderServiceImpl implements OrderService {
       }
     }
     lineRepository.saveAll(lines);
-    EvaluationContext context =
-        new EvaluationContext(
-            lines.stream()
-                .map(
-                    line ->
-                        new CartItem(
-                            line.getProduct().getId(), line.getQuantity(), line.getLineTotal()))
-                .toList(),
-            subtotal);
-    BigDecimal promotionDiscount =
-        promotionService.evaluate(context).stream()
-            .map(DiscountResult::amount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add)
-            .min(subtotal);
-    order.setSubtotal(subtotal);
-    order.setTaxTotal(taxTotal);
-    order.setDiscountTotal(promotionDiscount);
-    order.setTotalAmount(subtotal.add(taxTotal).subtract(promotionDiscount).max(BigDecimal.ZERO));
+    recalculateTotals(order, lines);
     order = orderRepository.save(order);
     displayService.pushOrderState(order);
     return map(order);
@@ -204,16 +187,9 @@ public class OrderServiceImpl implements OrderService {
   @Transactional
   public OrderResponse applyDiscount(Long orderId, String couponCode) {
     Order order = requireDraft(orderId);
-    DiscountResult discount = couponService.validate(couponCode, order.getSubtotal());
+    couponService.validate(couponCode, order.getSubtotal());
     order.setCoupon(couponService.getEntity(couponCode));
-    order.setDiscountTotal(
-        order.getDiscountTotal().add(discount.amount()).min(order.getSubtotal()));
-    order.setTotalAmount(
-        order
-            .getSubtotal()
-            .add(order.getTaxTotal())
-            .subtract(order.getDiscountTotal())
-            .max(BigDecimal.ZERO));
+    recalculateTotals(order, lineRepository.findByOrderId(orderId));
     return map(orderRepository.save(order));
   }
 
@@ -296,6 +272,7 @@ public class OrderServiceImpl implements OrderService {
   @Transactional
   public void deleteOrder(Long orderId) {
     Order order = requireDraft(orderId);
+    paymentRepository.deleteAll(paymentRepository.findByOrderId(orderId));
     lineRepository.deleteAll(lineRepository.findByOrderId(orderId));
     orderRepository.delete(order);
   }
@@ -379,5 +356,61 @@ public class OrderServiceImpl implements OrderService {
                         payment.getStatus(),
                         payment.getPaidAt()))
             .toList());
+  }
+
+  private void recalculateTotals(Order order, List<OrderLine> lines) {
+    BigDecimal subtotal =
+        lines.stream().map(OrderLine::getLineTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    BigDecimal grossTaxTotal = BigDecimal.ZERO;
+    for (OrderLine line : lines) {
+      if (line.getProduct().getTax() != null) {
+        grossTaxTotal =
+            grossTaxTotal.add(
+                line.getLineTotal()
+                    .multiply(line.getProduct().getTax().getRatePercent())
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
+      }
+    }
+
+    EvaluationContext context =
+        new EvaluationContext(
+            lines.stream()
+                .map(
+                    line ->
+                        new CartItem(
+                            line.getProduct().getId(), line.getQuantity(), line.getLineTotal()))
+                .toList(),
+            subtotal);
+
+    BigDecimal promotionDiscount =
+        promotionService.evaluate(context).stream()
+            .map(DiscountResult::amount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    BigDecimal couponDiscount = BigDecimal.ZERO;
+    if (order.getCoupon() != null) {
+      try {
+        DiscountResult couponResult = couponService.validate(order.getCoupon().getCode(), subtotal);
+        couponDiscount = couponResult.amount();
+      } catch (Exception e) {
+        order.setCoupon(null);
+      }
+    }
+
+    BigDecimal totalDiscount = promotionDiscount.add(couponDiscount).min(subtotal);
+
+    BigDecimal taxTotal;
+    if (subtotal.compareTo(BigDecimal.ZERO) > 0) {
+      BigDecimal netSubtotal = subtotal.subtract(totalDiscount).max(BigDecimal.ZERO);
+      taxTotal = grossTaxTotal.multiply(netSubtotal).divide(subtotal, 2, RoundingMode.HALF_UP);
+    } else {
+      taxTotal = BigDecimal.ZERO;
+    }
+
+    order.setSubtotal(subtotal);
+    order.setTaxTotal(taxTotal);
+    order.setDiscountTotal(totalDiscount);
+    order.setTotalAmount(subtotal.add(taxTotal).subtract(totalDiscount).max(BigDecimal.ZERO));
   }
 }

@@ -18,10 +18,14 @@ export function SessionLanding() {
   const lastOpenDate = openedAt ? new Date(openedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'No session yet';
   const lastSell = lastPaid ? `₹${lastPaid.total.toLocaleString('en-IN')}` : '₹0';
 
-  const handleOpen = () => {
-    if (!isOpen) openSession();
-    toast.success('Session opened.');
-    navigate('/pos');
+  const handleOpen = async () => {
+    try {
+      if (!isOpen) await openSession();
+      toast.success('Session opened.');
+      navigate('/pos');
+    } catch {
+      toast.error('Unable to open the POS session.');
+    }
   };
 
   return (

@@ -25,9 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class SecurityConfig {
   @Bean
   SecurityFilterChain securityFilterChain(
-      HttpSecurity http,
-      JwtAuthenticationFilter jwtAuthenticationFilter,
-      JsonMapper jsonMapper)
+      HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter, JsonMapper jsonMapper)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         .cors(Customizer.withDefaults())
@@ -61,7 +59,13 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             requests ->
                 requests
-                    .requestMatchers("/", "/error", "/api/auth/signup", "/api/auth/login")
+                    .requestMatchers(
+                        "/",
+                        "/error",
+                        "/openapi.yaml",
+                        "/api/auth/signup",
+                        "/api/auth/login",
+                        "/api/auth/refresh")
                     .permitAll()
                     .requestMatchers(
                         "/s/**",
@@ -70,6 +74,8 @@ public class SecurityConfig {
                         "/api/self-order/order/**",
                         "/api/customer-display/**",
                         "/ws/self-order/**")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/self-order/config")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**")
                     .hasAnyRole("ADMIN", "EMPLOYEE")

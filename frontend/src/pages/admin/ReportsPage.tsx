@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { PageHeader } from '../../components/shared/PageHeader';
-import { SectionLabel, Button, Input, Select, Badge } from '../../components/ui';
+import { SectionLabel, Button, Input, Select } from '../../components/ui';
 import { useCatalogStore } from '../../store/catalogStore';
 import { toast } from '../../components/ui/Toast';
+import { downloadApiFile } from '../../api/client';
 
 export function ReportsPage() {
   const { orders, products, categories, employees } = useCatalogStore();
@@ -102,17 +103,26 @@ export function ReportsPage() {
   }));
   const maxHourly = Math.max(...hourlyRevenue.map((h) => h.revenue), 1);
 
-  const exportData = (format: 'pdf' | 'xls') => {
-    const rows = filtered.map((o) => `${o.orderNum}\t${o.status}\t${o.total}\t${o.createdAt}\t${o.employeeName ?? ''}\t${o.customer ?? ''}`);
-    const header = 'Order\tStatus\tTotal\tDate\tEmployee\tCustomer';
-    const content = [header, ...rows].join('\n');
-    const mimeType = format === 'pdf' ? 'application/pdf' : 'application/vnd.ms-excel';
-    const blob = new Blob([content], { type: mimeType });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `reports.${format === 'pdf' ? 'pdf' : 'xls'}`;
-    a.click();
-    toast.success(`${format.toUpperCase()} exported.`);
+  const exportData = async (format: 'pdf' | 'xls') => {
+    const params = new URLSearchParams();
+    if (dateFrom && dateTo) {
+      params.set('period', 'CUSTOM');
+      params.set('from', dateFrom);
+      params.set('to', dateTo);
+    }
+    const product = products.find((item) => item.name === filterProduct);
+    const employee = employees.find((item) => item.name === filterUser);
+    if (product) params.set('productId', product.id);
+    if (employee) params.set('employeeId', employee.id);
+    try {
+      await downloadApiFile(
+        `/api/reports/export/${format}?${params.toString()}`,
+        format === 'pdf' ? 'cafe-report.pdf' : 'cafe-report.xlsx'
+      );
+      toast.success(`${format.toUpperCase()} exported.`);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Report export failed.');
+    }
   };
 
   const uniqueEmployees = [...new Set(orders.map((o) => o.employeeName).filter(Boolean))];
@@ -126,8 +136,8 @@ export function ReportsPage() {
         subtitle="Sales & performance"
         actions={
           <div className="flex gap-2">
-            <Button variant="ghost" size="md" onClick={() => exportData('pdf')}><Download size={14} /> PDF</Button>
-            <Button variant="ghost" size="md" onClick={() => exportData('xls')}><Download size={14} /> XLS</Button>
+            <Button variant="ghost" size="md" onClick={() => void exportData('pdf')}><Download size={14} /> PDF</Button>
+            <Button variant="ghost" size="md" onClick={() => void exportData('xls')}><Download size={14} /> XLS</Button>
           </div>
         }
       />
@@ -209,7 +219,7 @@ export function ReportsPage() {
               <div className="flex items-center gap-6 mb-4">
                 <div className="relative w-24 h-24">
                   <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-                    {catAgg.reduce((acc, c, idx) => {
+                    {catAgg.reduce((acc, c) => {
                       const pct = (c.qty / totalCat) * 100;
                       const offset = acc.offset;
                       acc.elements.push(

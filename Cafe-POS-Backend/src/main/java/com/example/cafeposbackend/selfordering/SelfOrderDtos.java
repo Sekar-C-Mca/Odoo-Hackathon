@@ -1,5 +1,6 @@
 package com.example.cafeposbackend.selfordering;
 
+import com.example.cafeposbackend.common.enums.KdsItemStatus;
 import com.example.cafeposbackend.common.enums.OrderStatus;
 import com.example.cafeposbackend.common.enums.SelfOrderingMode;
 import com.example.cafeposbackend.order.OrderDtos.OrderLineRequest;
@@ -28,5 +29,6 @@ public final class SelfOrderDtos {
   public record SelfOrderResponse(
       Long orderId, String orderNumber, Long tableId, BigDecimal total, OrderStatus status) {}
 
-  public record OrderStatusResponse(Long orderId, String orderNumber, OrderStatus status) {}
+  public record OrderStatusResponse(
+      Long orderId, String orderNumber, OrderStatus status, KdsItemStatus kitchenStage) {}
 }

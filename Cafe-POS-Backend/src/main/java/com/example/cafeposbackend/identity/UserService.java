@@ -9,6 +9,8 @@ public interface UserService {
 
   UserResponse create(CreateUserRequest request);
 
+  UserResponse update(Long id, UpdateUserRequest request);
+
   UserResponse changePassword(Long id, ChangePasswordRequest request);
 
   UserResponse archive(Long id);

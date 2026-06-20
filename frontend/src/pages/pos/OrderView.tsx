@@ -5,18 +5,18 @@ import { SectionLabel, Button, Badge, Input, Select } from '../../components/ui'
 import { FloorPopup } from './FloorPopup';
 import { useCatalogStore, categoryColor } from '../../store/catalogStore';
 import { useCartStore, cartTotals } from '../../store/cartStore';
-import { useKDSStore } from '../../store/kdsStore';
-import { useAuthStore } from '../../store/authStore';
 import { toast } from '../../components/ui/Toast';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { api } from '../../api/client';
+import type { OrderDto } from '../../api/contracts';
+import { useSessionStore } from '../../store/sessionStore';
 
 export function OrderView() {
   const navigate = useNavigate();
   const { products, categories, coupons } = useCatalogStore();
-  const { items, tableId, tableLabel, customer, coupon, addItem, updateQty, removeItem, setTable, applyCoupon, applyItemDiscount, clearCart } = useCartStore();
-  const addTicket = useKDSStore((s) => s.addTicket);
-  const addOrder = useCatalogStore((s) => s.addOrder);
-  const user = useAuthStore((s) => s.user);
+  const { orderId, items, tableId, tableLabel, customer, coupon, addItem, updateQty, removeItem, setTable, setOrder, applyCoupon, applyItemDiscount, clearCart } = useCartStore();
+  const refreshOrders = useCatalogStore((s) => s.refreshOrders);
+  const sessionId = useSessionStore((s) => s.sessionId);
 
   const isMobile = useMediaQuery('(max-width: 899px)');
   const [floorOpen, setFloorOpen] = useState(!tableId);
@@ -60,48 +60,59 @@ export function OrderView() {
   );
   const totals = useMemo(() => cartTotals(items, coupon), [items, coupon]);
 
-  const sendToKitchen = () => {
+  const saveDraft = async () => {
+    if (!sessionId) throw new Error('Open a POS session first.');
+    const order = await api<OrderDto>(
+      `/api/orders?sessionId=${sessionId}${tableId ? `&tableId=${tableId}` : ''}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          orderId: orderId ? Number(orderId) : null,
+          customerId: customer ? Number(customer.id) : null,
+          lines: items.map((item) => ({ productId: Number(item.id), quantity: item.qty })),
+        }),
+      }
+    );
+    setOrder(String(order.id), order.orderNumber);
+    return order;
+  };
+
+  const sendToKitchen = async () => {
     if (items.length === 0) {
       toast.error('Cart is empty.');
       return;
     }
-    const orderNum = `#${String(Math.floor(Math.random() * 9000) + 1000)}`;
-    addTicket({
-      id: `k-${Date.now()}`,
-      orderNum,
-      tableLabel: tableLabel ?? 'Takeaway',
-      items: items.map((i) => ({ id: i.id, name: i.name, qty: i.qty, done: false })),
-    });
-    addOrder({
-      id: `o-${Date.now()}`,
-      orderNum,
-      tableLabel,
-      status: 'draft',
-      total: totals.total,
-      customer: customer?.name,
-      employeeName: user?.name,
-      items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, discount: i.discount })),
-      createdAt: new Date().toISOString(),
-    });
-    toast.success(`${orderNum} sent to kitchen (draft).`);
-    clearCart();
-    setCartOpen(false);
+    try {
+      const draft = await saveDraft();
+      await api(`/api/orders/${draft.id}/send-kitchen`, { method: 'POST' });
+      await refreshOrders();
+      toast.success(`${draft.orderNumber} sent to kitchen.`);
+      setCartOpen(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to send order.');
+    }
   };
 
-  const applyCouponCode = () => {
-    const c = coupons.find((x) => x.code.toLowerCase() === couponCode.trim().toLowerCase() && x.active);
-    if (!c) {
-      toast.error('Invalid or inactive coupon.');
-      return;
+  const applyCouponCode = async () => {
+    try {
+      const validation = await api<{ type: 'PERCENTAGE' | 'FIXED'; value: number }>(
+        '/api/coupons/validate',
+        {
+          method: 'POST',
+          body: JSON.stringify({ code: couponCode.trim(), orderTotal: totals.subtotal }),
+        }
+      );
+      applyCoupon({
+        code: couponCode.trim().toUpperCase(),
+        type: validation.type === 'PERCENTAGE' ? 'percent' : 'flat',
+        value: Number(validation.value),
+      });
+      toast.success(`Coupon ${couponCode.trim().toUpperCase()} applied.`);
+      setCouponOpen(false);
+      setCouponCode('');
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Invalid coupon.');
     }
-    if (c.minOrder > 0 && totals.subtotal < c.minOrder) {
-      toast.error(`Minimum order ₹${c.minOrder} required for this coupon.`);
-      return;
-    }
-    applyCoupon({ code: c.code, type: c.type, value: c.value });
-    toast.success(`Coupon ${c.code} applied.`);
-    setCouponOpen(false);
-    setCouponCode('');
   };
 
   const applyDiscount = () => {

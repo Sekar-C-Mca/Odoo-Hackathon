@@ -3,42 +3,35 @@ import { useNavigate } from 'react-router-dom';
 import { AuthShell, AuthLink } from './AuthShell';
 import { Button, Input } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
-import { useCatalogStore } from '../../store/catalogStore';
 import { useSessionStore } from '../../store/sessionStore';
 import { toast } from '../../components/ui/Toast';
+import { api, type AuthResponse, ApiClientError } from '../../api/client';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const login = useAuthStore((s) => s.login);
-  const employees = useCatalogStore((s) => s.employees);
+  const setSession = useAuthStore((s) => s.setSession);
   const { isOpen } = useSessionStore();
-  const [email, setEmail] = useState('amara@cafeetoile.test');
-  const [password, setPassword] = useState('1111');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const emp = employees.find(
-      (x) =>
-        x.email.toLowerCase() === email.trim().toLowerCase() &&
-        x.pin === password &&
-        x.active &&
-        !x.archived
-    );
-    if (!emp) {
-      setError('Invalid credentials or inactive employee.');
-      return;
-    }
-    login(
-      { id: emp.id, name: emp.name, email: emp.email, role: emp.role },
-      `token-${emp.id}-${Date.now()}`
-    );
-    toast.success(`Welcome back, ${emp.name.split(' ')[0]}.`);
-    if (emp.role === 'ADMIN') {
-      navigate('/admin/dashboard');
-    } else {
-      // Employee: go directly to POS if session is open, otherwise session landing
-      navigate(isOpen ? '/pos' : '/pos/session');
+    setSubmitting(true);
+    setError('');
+    try {
+      const auth = await api<AuthResponse>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      setSession(auth);
+      toast.success(`Welcome back, ${auth.name.split(' ')[0]}.`);
+      navigate(auth.role === 'ADMIN' ? '/admin/dashboard' : isOpen ? '/pos' : '/pos/session');
+    } catch (cause) {
+      setError(cause instanceof ApiClientError ? cause.message : 'Unable to sign in.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -73,18 +66,11 @@ export function LoginPage() {
           <p className="mt-4 text-[16px] font-light text-cancel">{error}</p>
         )}
         <div className="mt-8">
-          <Button type="submit" fullWidth size="lg">
-            Login
+          <Button type="submit" fullWidth size="lg" disabled={submitting}>
+            {submitting ? 'Signing in…' : 'Login'}
           </Button>
         </div>
         <AuthLink to="/signup" label="Sign Up here" prefix="New here?" />
-        <div className="mt-8 p-4 border border-border text-[15px] font-light text-text-muted leading-relaxed">
-          <span className="tracking-[0.18em] uppercase text-gold">Demo logins</span>
-          <br />
-          Admin · amara@cafeetoile.test / 1111
-          <br />
-          Employee · lea@cafeetoile.test / 2222
-        </div>
       </form>
     </AuthShell>
   );

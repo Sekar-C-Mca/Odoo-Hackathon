@@ -13,6 +13,8 @@ public interface SelfOrderService {
 
   byte[] downloadQrPdf(Long tableId);
 
+  TableTokenResponse getTableToken(Long tableId);
+
   TableTokenResponse resolveToken(String token);
 
   List<ProductResponse> getMenu(String token);

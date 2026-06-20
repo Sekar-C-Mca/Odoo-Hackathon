@@ -37,6 +37,24 @@ public class UserServiceImpl implements UserService {
   }
 
   @Override
+  public UserResponse update(Long id, UpdateUserRequest request) {
+    AdminUser user = find(id);
+    String email = request.email().trim().toLowerCase();
+    repository
+        .findByEmail(email)
+        .filter(existing -> !existing.getId().equals(id))
+        .ifPresent(
+            existing -> {
+              throw new BusinessRuleException("Email is already registered");
+            });
+    user.setName(request.name().trim());
+    user.setEmail(email);
+    user.setRole(request.role());
+    user.setActive(request.active());
+    return map(repository.save(user));
+  }
+
+  @Override
   public UserResponse changePassword(Long id, ChangePasswordRequest request) {
     AdminUser user = find(id);
     user.setPasswordHash(passwordEncoder.encode(request.password()));

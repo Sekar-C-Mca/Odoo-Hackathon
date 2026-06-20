@@ -32,12 +32,12 @@ export function POSLayout() {
   const [navOpen, setNavOpen] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, clearSession } = useAuthStore();
   const tableLabel = useCartStore((s) => s.tableLabel);
   const { isOpen } = useSessionStore();
 
   const handleLogout = () => {
-    logout();
+    clearSession();
     toast.info('Signed out.');
     navigate('/login');
   };

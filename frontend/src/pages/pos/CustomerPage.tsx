@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search, UserPlus, Pencil, Trash2, X } from 'lucide-react';
+import { Search, UserPlus, Pencil, Trash2 } from 'lucide-react';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { SectionLabel, Input, Button, Badge, Modal } from '../../components/ui';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';

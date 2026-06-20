@@ -31,6 +31,11 @@ public class SelfOrderController {
     return ApiResponse.success(service.generateTableQr(id));
   }
 
+  @GetMapping("/api/self-order/tables/{id}/token")
+  ApiResponse<TableTokenResponse> token(@PathVariable Long id) {
+    return ApiResponse.success(service.getTableToken(id));
+  }
+
   @GetMapping(
       value = "/api/self-order/tables/{id}/qr/pdf",
       produces = MediaType.APPLICATION_PDF_VALUE)

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Filter, X } from 'lucide-react';
 import { useKDSStore, type KDSStage } from '../../store/kdsStore';
 import { useCatalogStore } from '../../store/catalogStore';
-import { Button } from '../../components/ui';
+import { toast } from '../../components/ui/Toast';
 
 const stages: { id: KDSStage | 'all'; label: string; color: string }[] = [
   { id: 'all', label: 'All', color: '#AAA69E' },
@@ -12,7 +12,7 @@ const stages: { id: KDSStage | 'all'; label: string; color: string }[] = [
 ];
 
 export function KDSPage() {
-  const { tickets, advanceStage, markItemDone, addTicket } = useKDSStore();
+  const { tickets, advanceStage, markItemDone, hydrate } = useKDSStore();
   const { products, categories } = useCatalogStore();
   const [activeTab, setActiveTab] = useState<KDSStage | 'all'>('all');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -20,15 +20,12 @@ export function KDSPage() {
   const [filterCategories, setFilterCategories] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (tickets.length > 0) return;
-    const seed = [
-      { id: 'k-seed-1', orderNum: '#0047', tableLabel: '04', items: [{ id: 'i1', name: 'Flat White', qty: 2, done: false }, { id: 'i2', name: 'Avocado Toast', qty: 1, done: false }, { id: 'i3', name: 'Cold Brew', qty: 1, done: false }] },
-      { id: 'k-seed-2', orderNum: '#0051', tableLabel: '07', items: [{ id: 'i4', name: 'Espresso', qty: 1, done: false }] },
-      { id: 'k-seed-3', orderNum: '#0044', tableLabel: '09', items: [{ id: 'i5', name: 'Cappuccino', qty: 2, done: false }, { id: 'i6', name: 'Mocha', qty: 1, done: true }] },
-      { id: 'k-seed-4', orderNum: '#0041', tableLabel: '03', items: [{ id: 'i7', name: 'Eggs Benedict', qty: 1, done: true }, { id: 'i8', name: 'Flat White', qty: 1, done: true }] },
-    ];
-    seed.forEach((s) => addTicket(s as never));
-  }, [tickets.length, addTicket]);
+    void hydrate().catch((cause) =>
+      toast.error(cause instanceof Error ? cause.message : 'Unable to load kitchen tickets.')
+    );
+    const timer = window.setInterval(() => void hydrate().catch(() => undefined), 5000);
+    return () => window.clearInterval(timer);
+  }, [hydrate]);
 
   const filtered = useMemo(() => {
     return tickets.filter((t) => {
@@ -59,8 +56,6 @@ export function KDSPage() {
 
   const uniqueItems = [...new Set(tickets.flatMap((t) => t.items.map((i) => i.name)))];
 
-  const stageColor = (stage: KDSStage) => stages.find((s) => s.id === stage)?.color ?? '#AAA69E';
-
   const renderColumn = (stage: KDSStage) => {
     const col = filtered.filter((t) => t.stage === stage);
     const stg = stages.find((s) => s.id === stage)!;
@@ -86,7 +81,11 @@ export function KDSPage() {
                 }}
               >
                 <button
-                  onClick={() => advanceStage(t.id)}
+                  onClick={() =>
+                    void advanceStage(t.id).catch((cause) =>
+                      toast.error(cause instanceof Error ? cause.message : 'Unable to advance ticket.')
+                    )
+                  }
                   className="w-full text-left mb-4"
                   title="Click to advance stage"
                 >
@@ -98,7 +97,11 @@ export function KDSPage() {
                 {t.items.map((i) => (
                   <button
                     key={i.id}
-                    onClick={() => markItemDone(t.id, i.id)}
+                    onClick={() =>
+                      void markItemDone(t.id, i.id).catch((cause) =>
+                        toast.error(cause instanceof Error ? cause.message : 'Unable to update item.')
+                      )
+                    }
                     className="w-full flex items-center justify-between py-3 border-b last:border-0"
                     style={{ borderColor: 'rgba(255,255,255,0.09)' }}
                   >

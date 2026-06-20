@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { PageHeader } from '../../components/shared/PageHeader';
-import { SectionLabel, Button, Input, Select, Badge, Drawer } from '../../components/ui';
+import { Button, Input, Select, Badge, Drawer } from '../../components/ui';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { useCatalogStore } from '../../store/catalogStore';
 import { toast } from '../../components/ui/Toast';

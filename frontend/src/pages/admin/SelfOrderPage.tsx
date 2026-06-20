@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Copy, ExternalLink, QrCode as QrIcon, Download } from 'lucide-react';
 import { PageHeader } from '../../components/shared/PageHeader';
-import { SectionLabel, Button, Badge, Input, Select } from '../../components/ui';
+import { SectionLabel, Button, Badge, Select, Input } from '../../components/ui';
 import { useCatalogStore } from '../../store/catalogStore';
 import { toast } from '../../components/ui/Toast';
+import { api, downloadApiFile } from '../../api/client';
 
 export function SelfOrderPage() {
   const {
@@ -14,30 +15,57 @@ export function SelfOrderPage() {
     tables,
   } = useCatalogStore();
 
-  const token = 'etoile-7421-cafe';
-  const url = `${window.location.origin}/s/${token}`;
+  const [selectedTableId, setSelectedTableId] = useState('');
+  const [tableToken, setTableToken] = useState('');
+  const [qrImage, setQrImage] = useState('');
+  const [imageUrl, setImageUrl] = useState(selfOrderImages[0] ?? '');
+  const selectedTable = tables.find((table) => table.id === selectedTableId);
+  const url = tableToken ? `${window.location.origin}/s/${tableToken}` : '';
+
+  useEffect(() => {
+    if (!selectedTableId && tables[0]) setSelectedTableId(tables[0].id);
+  }, [selectedTableId, tables]);
+
+  useEffect(() => {
+    if (!selectedTableId) return;
+    void Promise.all([
+      api<{ token: string }>(`/api/self-order/tables/${selectedTableId}/token`),
+      api<string>(`/api/self-order/tables/${selectedTableId}/qr`),
+    ])
+      .then(([tokenResponse, image]) => {
+        setTableToken(tokenResponse.token);
+        setQrImage(image);
+      })
+      .catch((cause) =>
+        toast.error(cause instanceof Error ? cause.message : 'Unable to generate table QR.')
+      );
+  }, [selectedTableId]);
 
   const copy = () => {
     navigator.clipboard?.writeText(url);
     toast.success('Link copied to clipboard.');
   };
 
-  const handleImageUpload = (idx: number) => {
-    const imgs = [...selfOrderImages];
-    imgs[idx] = `image-${idx + 1}-${Date.now()}.jpg`;
-    setSelfOrderImages(imgs);
-    toast.success(`Image ${idx + 1} uploaded.`);
+  const saveImageUrl = async () => {
+    try {
+      await setSelfOrderImages(imageUrl ? [imageUrl] : []);
+      toast.success('Background image updated.');
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to update image.');
+    }
   };
 
-  const downloadQR = () => {
-    const lines = tables.map((t) => `Table ${t.label}: ${window.location.origin}/s/${t.token ?? token}`);
-    const content = `QR Codes - Café Étoile\n${'='.repeat(40)}\n\n${lines.join('\n\n')}`;
-    const blob = new Blob([content], { type: 'application/pdf' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'cafe-etoile-qr-codes.pdf';
-    a.click();
-    toast.success('QR codes downloaded.');
+  const downloadQR = async () => {
+    if (!selectedTableId) return;
+    try {
+      await downloadApiFile(
+        `/api/self-order/tables/${selectedTableId}/qr/pdf`,
+        `table-${selectedTable?.label ?? selectedTableId}-qr.pdf`
+      );
+      toast.success('QR code downloaded.');
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to download QR code.');
+    }
   };
 
   return (
@@ -95,24 +123,12 @@ export function SelfOrderPage() {
               </div>
             </div>
             <div className="p-5" style={{ background: 'var(--surface)' }}>
-              <label className="block mb-2 text-[14px] font-semibold text-text-muted">Background images</label>
-              <div className="grid grid-cols-3 gap-3">
-                {[0, 1, 2].map((idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleImageUpload(idx)}
-                    className="aspect-square border border-dashed border-border flex flex-col items-center justify-center text-text-faint hover:border-gold hover:text-gold transition-colors"
-                  >
-                    {selfOrderImages[idx] ? (
-                      <span className="text-[12px] text-paid">✓ Image {idx + 1}</span>
-                    ) : (
-                      <>
-                        <span className="text-[20px]">+</span>
-                        <span className="text-[11px] mt-1">Image {idx + 1}</span>
-                      </>
-                    )}
-                  </button>
-                ))}
+              <label className="block mb-2 text-[14px] font-semibold text-text-muted">Background image URL</label>
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://example.com/cafe.jpg" />
+                </div>
+                <Button size="sm" onClick={() => void saveImageUrl()}>Save</Button>
               </div>
             </div>
           </div>
@@ -121,16 +137,21 @@ export function SelfOrderPage() {
           {selfOrderMode === 'online' && (
             <>
               <SectionLabel>Online ordering</SectionLabel>
+              <div className="max-w-sm mb-4">
+                <Select label="Table QR" value={selectedTableId} onChange={(e) => setSelectedTableId(e.target.value)}>
+                  {tables.map((table) => <option key={table.id} value={table.id}>Table {table.label}</option>)}
+                </Select>
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-border mb-6">
                 <div className="p-6" style={{ background: 'var(--surface)' }}>
                   <div className="text-[14px] tracking-[0.22em] uppercase font-extralight text-text-muted mb-3">Public URL</div>
-                  <div className="font-display text-[18px] text-text break-all leading-tight">{url}</div>
+                  <div className="font-display text-[18px] text-text break-all leading-tight">{url || 'Generating link…'}</div>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Button size="sm" onClick={copy}><Copy size={13} /> Copy link</Button>
+                    <Button size="sm" disabled={!url} onClick={copy}><Copy size={13} /> Copy link</Button>
                     <a href={url} target="_blank" rel="noreferrer">
                       <Button variant="ghost" size="sm"><ExternalLink size={13} /> Preview Webpage</Button>
                     </a>
-                    <Button variant="ghost" size="sm" onClick={downloadQR}><Download size={13} /> Download QR code</Button>
+                    <Button variant="ghost" size="sm" onClick={() => void downloadQR()}><Download size={13} /> Download QR code</Button>
                   </div>
                 </div>
                 <div className="p-6" style={{ background: 'var(--surface)' }}>
@@ -145,7 +166,7 @@ export function SelfOrderPage() {
               <div className="p-5 border border-border mb-6" style={{ background: 'var(--surface)' }}>
                 <div className="flex items-center justify-center">
                   <div className="w-40 h-40 border border-border flex items-center justify-center text-gold">
-                    <QrIcon size={120} strokeWidth={1} />
+                    {qrImage ? <img src={qrImage} alt={`QR for table ${selectedTable?.label ?? ''}`} className="w-36 h-36" /> : <QrIcon size={120} strokeWidth={1} />}
                   </div>
                 </div>
                 <div className="text-center mt-3">
@@ -166,7 +187,7 @@ export function SelfOrderPage() {
                 <p className="text-[16px] font-light text-text-muted mb-4">
                   Customers can browse the menu but cannot place orders. The ordering functionality is disabled end-to-end.
                 </p>
-                <Button variant="ghost" size="sm" onClick={downloadQR}><Download size={13} /> Download QR code</Button>
+                <Button variant="ghost" size="sm" onClick={() => void downloadQR()}><Download size={13} /> Download QR code</Button>
               </div>
             </>
           )}

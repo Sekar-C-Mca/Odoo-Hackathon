@@ -27,13 +27,22 @@ export function TablesView() {
     }
     const existingDraft = orders.find((o) => o.status === 'draft' && o.tableLabel === label);
     if (existingDraft) {
-      const cartItems = existingDraft.items.map((i, idx) => ({
-        id: `resume-${idx}-${Date.now()}`,
+      const cartItems = existingDraft.items.map((i) => ({
+        id: i.productId ?? '',
         name: i.name,
         price: i.price,
         qty: i.qty,
       }));
-      loadOrder(cartItems, label, existingDraft.customer ? { id: 'cu-resume', name: existingDraft.customer } : null);
+      loadOrder(
+        cartItems,
+        id,
+        label,
+        existingDraft.customer && existingDraft.customerId
+          ? { id: existingDraft.customerId, name: existingDraft.customer }
+          : null,
+        existingDraft.id,
+        existingDraft.orderNum
+      );
       toast.info(`Resumed draft ${existingDraft.orderNum} for Table ${label}.`);
     } else {
       clearCart();

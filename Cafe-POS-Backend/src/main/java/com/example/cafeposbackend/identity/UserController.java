@@ -26,6 +26,12 @@ public class UserController {
     return ApiResponse.success(service.create(request));
   }
 
+  @PutMapping("/{id}")
+  ApiResponse<UserResponse> update(
+      @PathVariable Long id, @Valid @RequestBody UpdateUserRequest request) {
+    return ApiResponse.success(service.update(id, request));
+  }
+
   @PutMapping("/{id}/password")
   ApiResponse<UserResponse> password(
       @PathVariable Long id, @Valid @RequestBody ChangePasswordRequest request) {

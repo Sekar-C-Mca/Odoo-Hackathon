@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { api } from '../api/client';
+import type { KdsTicketDto } from '../api/contracts';
 
 export type KDSStage = 'to_cook' | 'preparing' | 'completed';
 
@@ -21,48 +23,61 @@ export interface KDSTicket {
 
 interface KDSState {
   tickets: KDSTicket[];
-  addTicket: (t: Omit<KDSTicket, 'createdAt' | 'stage'>) => void;
-  advanceStage: (id: string) => void;
-  markItemDone: (ticketId: string, itemId: string) => void;
+  loading: boolean;
+  hydrate: () => Promise<void>;
+  advanceStage: (id: string) => Promise<void>;
+  markItemDone: (ticketId: string, itemId: string) => Promise<void>;
   reset: () => void;
   getTicketByOrder: (orderNum: string) => KDSTicket | undefined;
 }
 
+const fromDto = (ticket: KdsTicketDto): KDSTicket => ({
+  id: String(ticket.orderId),
+  orderNum: ticket.orderNumber,
+  tableLabel: ticket.tableNumber ?? 'Takeaway',
+  stage: ticket.stage.toLowerCase() as KDSStage,
+  createdAt: new Date(ticket.createdAt).getTime(),
+  items: ticket.items.map((item) => ({
+    id: String(item.id),
+    name: item.productName,
+    qty: Number(item.quantity),
+    done: item.status === 'COMPLETED',
+  })),
+});
+
 export const useKDSStore = create<KDSState>((set, get) => ({
   tickets: [],
-  addTicket: (t) =>
-    set((s) => ({
-      tickets: [
-        ...s.tickets,
-        { ...t, stage: 'to_cook', createdAt: Date.now() },
-      ],
-    })),
-  advanceStage: (id) =>
-    set((s) => ({
-      tickets: s.tickets.map((t) => {
-        if (t.id !== id) return t;
-        const next: KDSStage =
-          t.stage === 'to_cook'
-            ? 'preparing'
-            : t.stage === 'preparing'
-            ? 'completed'
-            : 'completed';
-        return { ...t, stage: next };
-      }),
-    })),
-  markItemDone: (ticketId, itemId) =>
-    set((s) => ({
-      tickets: s.tickets.map((t) =>
-        t.id === ticketId
-          ? {
-              ...t,
-              items: t.items.map((i) =>
-                i.id === itemId ? { ...i, done: !i.done } : i
-              ),
-            }
-          : t
+  loading: false,
+  hydrate: async () => {
+    if (get().loading) return;
+    set({ loading: true });
+    try {
+      const tickets = await api<KdsTicketDto[]>('/api/kds/tickets');
+      set({ tickets: tickets.map(fromDto), loading: false });
+    } catch (error) {
+      set({ loading: false });
+      throw error;
+    }
+  },
+  advanceStage: async (id) => {
+    const ticket = await api<KdsTicketDto>(`/api/kds/tickets/${id}/advance`, {
+      method: 'PUT',
+    });
+    set((state) => ({
+      tickets: state.tickets.map((item) => (item.id === id ? fromDto(ticket) : item)),
+    }));
+  },
+  markItemDone: async (ticketId, itemId) => {
+    const ticket = await api<KdsTicketDto>(
+      `/api/kds/tickets/${ticketId}/items/${itemId}/done`,
+      { method: 'PUT' }
+    );
+    set((state) => ({
+      tickets: state.tickets.map((item) =>
+        item.id === ticketId ? fromDto(ticket) : item
       ),
-    })),
+    }));
+  },
   reset: () => set({ tickets: [] }),
   getTicketByOrder: (orderNum) => get().tickets.find((t) => t.orderNum === orderNum),
 }));

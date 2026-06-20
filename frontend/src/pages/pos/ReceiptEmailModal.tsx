@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { X, Mail, Send } from 'lucide-react';
 import { Button, Input } from '../../components/ui';
 import { toast } from '../../components/ui/Toast';
+import { api } from '../../api/client';
 
-export function ReceiptEmailModal({ open, onClose, orderNum, total }: { open: boolean; onClose: () => void; orderNum: string; total: number }) {
+export function ReceiptEmailModal({ open, onClose, orderId, orderNum, total }: { open: boolean; onClose: () => void; orderId: string | null; orderNum: string; total: number }) {
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -15,17 +16,28 @@ export function ReceiptEmailModal({ open, onClose, orderNum, total }: { open: bo
       toast.error('Please enter a valid email address.');
       return;
     }
+    if (!orderId) {
+      toast.error('The paid order could not be identified.');
+      return;
+    }
     setSending(true);
-    // Simulate email send (would be API call in production)
-    await new Promise((r) => setTimeout(r, 800));
-    setSending(false);
-    setSent(true);
-    toast.success(`Receipt sent to ${email}.`);
-    setTimeout(() => {
-      setSent(false);
-      setEmail('');
-      onClose();
-    }, 1500);
+    try {
+      await api(`/api/orders/${orderId}/receipt/email`, {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      setSent(true);
+      toast.success(`Receipt sent to ${email}.`);
+      window.setTimeout(() => {
+        setSent(false);
+        setEmail('');
+        onClose();
+      }, 1500);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to email receipt.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (

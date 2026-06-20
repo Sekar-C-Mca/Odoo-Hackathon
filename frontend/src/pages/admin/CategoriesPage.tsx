@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Plus, Trash2, GripVertical } from 'lucide-react';
 import { PageHeader } from '../../components/shared/PageHeader';
-import { SectionLabel, Button, Input } from '../../components/ui';
+import { SectionLabel, Button } from '../../components/ui';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { useCatalogStore } from '../../store/catalogStore';
 import { toast } from '../../components/ui/Toast';

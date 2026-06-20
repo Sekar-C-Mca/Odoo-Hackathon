@@ -3,37 +3,38 @@ import { useNavigate } from 'react-router-dom';
 import { AuthShell, AuthLink } from './AuthShell';
 import { Button, Input } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
-import { useCatalogStore } from '../../store/catalogStore';
 import { toast } from '../../components/ui/Toast';
+import { api, ApiClientError, type AuthResponse } from '../../api/client';
 
 export function SignupPage() {
   const navigate = useNavigate();
-  const login = useAuthStore((s) => s.login);
-  const saveEmployee = useCatalogStore((s) => s.saveEmployee);
+  const setSession = useAuthStore((s) => s.setSession);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.includes('@') || password.length < 4) {
-      setError('Enter a name, valid email, and a 4+ character password.');
+    if (!name.trim() || !email.includes('@') || password.length < 8) {
+      setError('Enter a name, valid email, and an 8+ character password.');
       return;
     }
-    const id = `e-${Date.now()}`;
-    saveEmployee({
-      id,
-      name: name.trim(),
-      email: email.trim(),
-      role: 'ADMIN',
-      pin: password,
-      active: true,
-      archived: false,
-    });
-    login({ id, name: name.trim(), email: email.trim(), role: 'ADMIN' }, `token-${id}`);
-    toast.success('Account created.');
-    navigate('/admin/dashboard');
+    setSubmitting(true);
+    try {
+      const auth = await api<AuthResponse>('/api/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password, role: 'ADMIN' }),
+      });
+      setSession(auth);
+      toast.success('Account created.');
+      navigate('/admin/dashboard');
+    } catch (cause) {
+      setError(cause instanceof ApiClientError ? cause.message : 'Unable to create account.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -76,8 +77,8 @@ export function SignupPage() {
           <p className="mt-4 text-[16px] font-light text-cancel">{error}</p>
         )}
         <div className="mt-8">
-          <Button type="submit" fullWidth size="lg">
-            Sign Up
+          <Button type="submit" fullWidth size="lg" disabled={submitting}>
+            {submitting ? 'Creating…' : 'Sign Up'}
           </Button>
         </div>
         <AuthLink to="/login" label="Login" prefix="Already have an account?" />

@@ -67,11 +67,7 @@ class CafePosApiEndToEndTests {
         .andExpect(jsonPath("$.data.content[0].name").value("Espresso"));
 
     long floorId =
-        id(
-            json(
-                post("/api/floors"),
-                admin.accessToken(),
-                "{\"name\":\"Ground Floor\"}"));
+        id(json(post("/api/floors"), admin.accessToken(), "{\"name\":\"Ground Floor\"}"));
     long tableId =
         id(
             json(
@@ -106,17 +102,10 @@ class CafePosApiEndToEndTests {
         .andExpect(jsonPath("$.data.amount").value(12.0));
 
     long sessionId =
-        id(
-            json(
-                post("/api/sessions/open"),
-                employee.accessToken(),
-                "{\"openingAmount\":500}"));
+        id(json(post("/api/sessions/open"), employee.accessToken(), "{\"openingAmount\":500}"));
     MvcResult orderResult =
         json(
-            post("/api/orders?sessionId="
-                + sessionId
-                + "&tableId="
-                + tableId),
+            post("/api/orders?sessionId=" + sessionId + "&tableId=" + tableId),
             employee.accessToken(),
             """
             {"customerId":%d,"lines":[{"productId":%d,"quantity":1}]}
@@ -156,10 +145,7 @@ class CafePosApiEndToEndTests {
     assertThat(number(discounted, "$.data.totalAmount")).isEqualByComparingTo("103.0");
 
     long cashMethodId =
-        paymentMethodRepository
-            .findByType(PaymentMethodType.CASH)
-            .orElseThrow()
-            .getId();
+        paymentMethodRepository.findByType(PaymentMethodType.CASH).orElseThrow().getId();
     mockMvc
         .perform(
             post("/api/orders/" + orderId + "/payment")
@@ -194,7 +180,7 @@ class CafePosApiEndToEndTests {
                 .header("Authorization", bearer(admin.accessToken()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"mode\":\"QR_MENU\",\"enabled\":true,\"backgroundColor\":\"#ffffff\"}"))
+                    "{\"mode\":\"ONLINE_ORDERING\",\"enabled\":true,\"backgroundColor\":\"#ffffff\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.enabled").value(true));
     mockMvc
@@ -202,24 +188,44 @@ class CafePosApiEndToEndTests {
             get("/api/self-order/tables/" + tableId + "/qr")
                 .header("Authorization", bearer(admin.accessToken())))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data").value(org.hamcrest.Matchers.startsWith("data:image/png;base64,")));
+        .andExpect(
+            jsonPath("$.data").value(org.hamcrest.Matchers.startsWith("data:image/png;base64,")));
     String tableToken = tableQrCodeRepository.findByTableId(tableId).orElseThrow().getToken();
+    mockMvc
+        .perform(
+            get("/api/self-order/tables/" + tableId + "/token")
+                .header("Authorization", bearer(admin.accessToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.token").value(tableToken));
     mockMvc
         .perform(get("/api/self-order/menu/" + tableToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data[0].name").value("Espresso"));
-    mockMvc
-        .perform(
-            post("/api/self-order/order/" + tableToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    """
+    MvcResult selfOrder =
+        mockMvc
+            .perform(
+                post("/api/self-order/order/" + tableToken)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """
                     {"lines":[{"productId":%d,"quantity":1}]}
                     """
-                        .formatted(productId)))
+                            .formatted(productId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.tableId").value(tableId))
+            .andExpect(jsonPath("$.data.status").value("DRAFT"))
+            .andReturn();
+    Number selfOrderId = JsonPath.read(body(selfOrder), "$.data.orderId");
+    mockMvc
+        .perform(get("/api/self-order/order/" + selfOrderId + "/status"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.tableId").value(tableId))
-        .andExpect(jsonPath("$.data.status").value("DRAFT"));
+        .andExpect(jsonPath("$.data.kitchenStage").value("TO_COOK"));
+    mockMvc
+        .perform(
+            put("/api/orders/" + selfOrderId + "/cancel")
+                .header("Authorization", bearer(employee.accessToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("CANCELLED"));
 
     mockMvc
         .perform(
@@ -247,8 +253,7 @@ class CafePosApiEndToEndTests {
         .andExpect(status().isOk())
         .andExpect(
             content()
-                .contentType(
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+                .contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
 
     mockMvc
         .perform(
@@ -276,8 +281,7 @@ class CafePosApiEndToEndTests {
         .perform(
             post("/api/auth/logout")
                 .header(
-                    "Authorization",
-                    bearer(JsonPath.read(body(refreshed), "$.data.accessToken")))
+                    "Authorization", bearer(JsonPath.read(body(refreshed), "$.data.accessToken")))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"refreshToken\":\"%s\"}".formatted(refreshedToken)))
         .andExpect(status().isOk());

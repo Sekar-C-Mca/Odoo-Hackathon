@@ -1,16 +1,18 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { api, type PageResponse } from '../api/client';
+import type {
+  CategoryDto,
+  CouponDto,
+  CustomerDto,
+  FloorDto,
+  OrderDto,
+  PaymentMethodDto,
+  ProductDto,
+  PromotionDto,
+  UserDto,
+} from '../api/contracts';
 import {
   CATEGORY_PALETTE,
-  categoriesSeed,
-  couponsSeed,
-  customersSeed,
-  employeesSeed,
-  floorsSeed,
-  ordersSeed,
-  paymentMethodsSeed,
-  productsSeed,
-  tablesSeed,
   type Category,
   type Coupon,
   type Customer,
@@ -36,192 +38,509 @@ interface CatalogState {
   selfOrderMode: 'online' | 'qr_menu';
   selfOrderBgColor: string;
   selfOrderImages: string[];
-  setSelfOrderEnabled: (v: boolean) => void;
-  setSelfOrderMode: (v: 'online' | 'qr_menu') => void;
-  setSelfOrderBgColor: (v: string) => void;
-  setSelfOrderImages: (v: string[]) => void;
-  saveProduct: (p: Product) => void;
-  deleteProduct: (id: string) => void;
-  deleteProducts: (ids: string[]) => void;
-  saveCategory: (c: Category) => void;
-  deleteCategory: (id: string) => void;
-  reorderCategories: (cats: Category[]) => void;
-  saveEmployee: (e: Employee) => void;
-  deleteEmployee: (id: string) => void;
-  deleteEmployees: (ids: string[]) => void;
-  archiveEmployee: (id: string) => void;
-  archiveEmployees: (ids: string[]) => void;
-  changeEmployeePin: (id: string, pin: string) => void;
-  saveCoupon: (c: Coupon) => void;
-  deleteCoupon: (id: string) => void;
-  saveTable: (t: FloorTable) => void;
-  deleteTable: (id: string) => void;
-  addFloor: (name: string) => void;
-  savePaymentMethod: (pm: PaymentMethod) => void;
-  deletePaymentMethod: (id: string) => void;
-  togglePaymentMethod: (id: string) => void;
-  addOrder: (o: Order) => void;
+  loading: boolean;
+  hydrated: boolean;
+  hydrate: () => Promise<void>;
+  refreshOrders: () => Promise<void>;
+  setSelfOrderEnabled: (value: boolean) => Promise<void>;
+  setSelfOrderMode: (value: 'online' | 'qr_menu') => Promise<void>;
+  setSelfOrderBgColor: (value: string) => Promise<void>;
+  setSelfOrderImages: (value: string[]) => Promise<void>;
+  saveProduct: (product: Product) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  deleteProducts: (ids: string[]) => Promise<void>;
+  saveCategory: (category: Category) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+  reorderCategories: (categories: Category[]) => void;
+  saveEmployee: (employee: Employee) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
+  deleteEmployees: (ids: string[]) => Promise<void>;
+  archiveEmployee: (id: string) => Promise<void>;
+  archiveEmployees: (ids: string[]) => Promise<void>;
+  changeEmployeePin: (id: string, pin: string) => Promise<void>;
+  saveCoupon: (coupon: Coupon) => Promise<void>;
+  deleteCoupon: (id: string) => Promise<void>;
+  saveTable: (table: FloorTable) => Promise<void>;
+  deleteTable: (id: string) => Promise<void>;
+  addFloor: (name: string) => Promise<void>;
+  savePaymentMethod: (method: PaymentMethod) => Promise<void>;
+  deletePaymentMethod: (id: string) => Promise<void>;
+  togglePaymentMethod: (id: string) => Promise<void>;
+  addOrder: (order: Order) => void;
   updateOrder: (id: string, patch: Partial<Order>) => void;
-  deleteOrder: (id: string) => void;
-  saveCustomer: (c: Customer) => void;
-  deleteCustomer: (id: string) => void;
+  deleteOrder: (id: string) => Promise<void>;
+  saveCustomer: (customer: Customer) => Promise<void>;
+  deleteCustomer: (id: string) => Promise<void>;
 }
 
-export const useCatalogStore = create<CatalogState>()(
-  persist(
-    (set) => ({
-      products: productsSeed,
-      categories: categoriesSeed,
-      tables: tablesSeed,
-      floors: floorsSeed,
-      employees: employeesSeed,
-      coupons: couponsSeed,
-      paymentMethods: paymentMethodsSeed,
-      orders: ordersSeed,
-      customers: customersSeed,
-      selfOrderEnabled: true,
-      selfOrderMode: 'online',
-      selfOrderBgColor: '#1E3932',
-      selfOrderImages: [],
-      setSelfOrderEnabled: (v) => set({ selfOrderEnabled: v }),
-      setSelfOrderMode: (v) => set({ selfOrderMode: v }),
-      setSelfOrderBgColor: (v) => set({ selfOrderBgColor: v }),
-      setSelfOrderImages: (v) => set({ selfOrderImages: v }),
-      saveProduct: (p) =>
-        set((s) => ({
-          products: s.products.some((x) => x.id === p.id)
-            ? s.products.map((x) => (x.id === p.id ? p : x))
-            : [...s.products, p],
-        })),
-      deleteProduct: (id) =>
-        set((s) => ({ products: s.products.filter((p) => p.id !== id) })),
-      deleteProducts: (ids) =>
-        set((s) => ({ products: s.products.filter((p) => !ids.includes(p.id)) })),
-      saveCategory: (c) =>
-        set((s) => ({
-          categories: s.categories.some((x) => x.id === c.id)
-            ? s.categories.map((x) => (x.id === c.id ? c : x))
-            : [...s.categories, c],
-        })),
-      deleteCategory: (id) =>
-        set((s) => ({
-          categories: s.categories.filter((c) => c.id !== id),
-        })),
-      reorderCategories: (cats) => set({ categories: cats }),
-      saveEmployee: (e) =>
-        set((s) => ({
-          employees: s.employees.some((x) => x.id === e.id)
-            ? s.employees.map((x) => (x.id === e.id ? e : x))
-            : [...s.employees, e],
-        })),
-      deleteEmployee: (id) =>
-        set((s) => ({
-          employees: s.employees.filter((e) => e.id !== id),
-        })),
-      deleteEmployees: (ids) =>
-        set((s) => ({
-          employees: s.employees.filter((e) => !ids.includes(e.id)),
-        })),
-      archiveEmployee: (id) =>
-        set((s) => ({
-          employees: s.employees.map((e) =>
-            e.id === id ? { ...e, archived: true, active: false } : e
-          ),
-        })),
-      archiveEmployees: (ids) =>
-        set((s) => ({
-          employees: s.employees.map((e) =>
-            ids.includes(e.id) ? { ...e, archived: true, active: false } : e
-          ),
-        })),
-      changeEmployeePin: (id, pin) =>
-        set((s) => ({
-          employees: s.employees.map((e) =>
-            e.id === id ? { ...e, pin } : e
-          ),
-        })),
-      saveCoupon: (c) =>
-        set((s) => ({
-          coupons: s.coupons.some((x) => x.id === c.id)
-            ? s.coupons.map((x) => (x.id === c.id ? c : x))
-            : [...s.coupons, c],
-        })),
-      deleteCoupon: (id) =>
-        set((s) => ({ coupons: s.coupons.filter((c) => c.id !== id) })),
-      saveTable: (t) =>
-        set((s) => ({
-          tables: s.tables.some((x) => x.id === t.id)
-            ? s.tables.map((x) => (x.id === t.id ? t : x))
-            : [...s.tables, t],
-        })),
-      deleteTable: (id) =>
-        set((s) => ({ tables: s.tables.filter((t) => t.id !== id) })),
-      addFloor: (name) =>
-        set((s) => ({
-          floors: [...s.floors, { id: `f-${Date.now()}`, name }],
-        })),
-      savePaymentMethod: (pm) =>
-        set((s) => ({
-          paymentMethods: s.paymentMethods.some((x) => x.id === pm.id)
-            ? s.paymentMethods.map((x) => (x.id === pm.id ? pm : x))
-            : [...s.paymentMethods, pm],
-        })),
-      deletePaymentMethod: (id) =>
-        set((s) => ({
-          paymentMethods: s.paymentMethods.filter((p) => p.id !== id),
-        })),
-      togglePaymentMethod: (id) =>
-        set((s) => ({
-          paymentMethods: s.paymentMethods.map((p) =>
-            p.id === id ? { ...p, enabled: !p.enabled } : p
-          ),
-        })),
-      addOrder: (o) => set((s) => ({ orders: [o, ...s.orders] })),
-      updateOrder: (id, patch) =>
-        set((s) => ({
-          orders: s.orders.map((o) => (o.id === id ? { ...o, ...patch } : o)),
-        })),
-      deleteOrder: (id) =>
-        set((s) => ({ orders: s.orders.filter((o) => o.id !== id) })),
-      saveCustomer: (c) =>
-        set((s) => ({
-          customers: s.customers.some((x) => x.id === c.id)
-            ? s.customers.map((x) => (x.id === c.id ? c : x))
-            : [...s.customers, c],
-        })),
-      deleteCustomer: (id) =>
-        set((s) => ({
-          customers: s.customers.filter((c) => c.id !== id),
-        })),
-    }),
-    {
-      name: 'cafe-etoile-catalog',
-      version: 4,
-      migrate: (persistedState) => {
-        const state = persistedState as Partial<CatalogState>;
-        const builtInColors = new Map(
-          categoriesSeed.map((category) => [category.id, category.color])
-        );
+const productFromDto = (value: ProductDto): Product => ({
+  id: String(value.id),
+  name: value.name,
+  price: Number(value.price),
+  categoryId: String(value.categoryId),
+  taxRate: Number(value.taxRate ?? 0),
+  uom: value.unitOfMeasure === 'KG' ? 'g' : value.unitOfMeasure === 'LITRE' ? 'ml' : 'pc',
+  available: true,
+  description: value.description,
+});
+const categoryFromDto = (value: CategoryDto): Category => ({
+  id: String(value.id),
+  name: value.name,
+  color: value.colorHex,
+});
+const employeeFromDto = (value: UserDto): Employee => ({
+  id: String(value.id),
+  name: value.name,
+  email: value.email,
+  role: value.role,
+  pin: '',
+  active: value.active,
+  archived: !value.active,
+});
+const paymentFromDto = (value: PaymentMethodDto): PaymentMethod => ({
+  id: String(value.id),
+  name: value.type === 'UPI' ? 'UPI QR' : value.type === 'CARD' ? 'Digital Card' : 'Cash',
+  type: value.type.toLowerCase() as PaymentMethod['type'],
+  enabled: value.enabled,
+  upiId: value.upiId,
+});
+const customerFromDto = (value: CustomerDto): Customer => ({
+  id: String(value.id),
+  name: value.name,
+  email: value.email,
+  phone: value.phone ?? '',
+  visits: 0,
+  totalSpend: 0,
+});
+const orderFromDto = (
+  value: OrderDto,
+  tables: FloorTable[],
+  employees: Employee[],
+  customers: Customer[]
+): Order => ({
+  id: String(value.id),
+  orderNum: value.orderNumber,
+  tableId: value.tableId ? String(value.tableId) : null,
+  tableLabel: tables.find((table) => table.id === String(value.tableId))?.label ?? null,
+  status: value.status.toLowerCase() as Order['status'],
+  total: Number(value.totalAmount),
+  customerId: value.customerId ? String(value.customerId) : null,
+  customer: customers.find((customer) => customer.id === String(value.customerId))?.name,
+  employeeName: employees.find((employee) => employee.id === String(value.employeeId))?.name,
+  sessionId: String(value.sessionId),
+  items: value.lines.map((line) => ({
+    productId: String(line.productId),
+    name: line.productName,
+    qty: Number(line.quantity),
+    price: Number(line.unitPrice),
+    discount: Number(line.discountAmount),
+  })),
+  createdAt: value.createdAt,
+  paymentMethod: undefined,
+});
 
-        return {
-          ...state,
-          categories: (state.categories ?? categoriesSeed).map((category) => ({
-            ...category,
-            color: builtInColors.get(category.id) ?? category.color,
-          })),
-          selfOrderEnabled: state.selfOrderEnabled ?? true,
-          selfOrderMode: state.selfOrderMode ?? 'online',
-          selfOrderBgColor: state.selfOrderBgColor ?? '#1E3932',
-          selfOrderImages: state.selfOrderImages ?? [],
-        } as CatalogState;
-      },
+const emptyPage = <T>(): PageResponse<T> => ({
+  content: [],
+  totalElements: 0,
+  totalPages: 0,
+  number: 0,
+  size: 0,
+});
+
+interface SelfOrderConfigDto {
+  enabled: boolean;
+  mode: 'ONLINE_ORDERING' | 'QR_MENU';
+  backgroundColor?: string;
+  backgroundImageUrl?: string;
+}
+
+export const useCatalogStore = create<CatalogState>((set, get) => ({
+  products: [],
+  categories: [],
+  tables: [],
+  floors: [],
+  employees: [],
+  coupons: [],
+  paymentMethods: [],
+  orders: [],
+  customers: [],
+  selfOrderEnabled: false,
+  selfOrderMode: 'qr_menu',
+  selfOrderBgColor: '#1E3932',
+  selfOrderImages: [],
+  loading: false,
+  hydrated: false,
+
+  hydrate: async () => {
+    if (get().loading) return;
+    set({ loading: true });
+    try {
+      const [productsPage, categories, floorsDto, usersPage, couponsDto, promotions, methods, customersPage, ordersPage, config] =
+        await Promise.all([
+          api<PageResponse<ProductDto>>('/api/products?size=500'),
+          api<CategoryDto[]>('/api/categories'),
+          api<FloorDto[]>('/api/floors'),
+          api<PageResponse<UserDto>>('/api/users?size=500').catch(() => emptyPage<UserDto>()),
+          api<CouponDto[]>('/api/coupons').catch(() => []),
+          api<PromotionDto[]>('/api/promotions').catch(() => []),
+          api<PaymentMethodDto[]>('/api/payment-methods'),
+          api<PageResponse<CustomerDto>>('/api/customers?size=500').catch(() => emptyPage<CustomerDto>()),
+          api<PageResponse<OrderDto>>('/api/orders?size=500').catch(() => emptyPage<OrderDto>()),
+          api<SelfOrderConfigDto>(
+            '/api/self-order/config'
+          ).catch((): SelfOrderConfigDto => ({ enabled: false, mode: 'QR_MENU' })),
+        ]);
+
+      const floors = floorsDto.map((floor) => ({ id: String(floor.id), name: floor.name }));
+      const tables = floorsDto.flatMap((floor) =>
+        floor.tables.map((table) => ({
+          id: String(table.id),
+          label: table.tableNumber,
+          floorId: String(table.floorId),
+          seats: table.seats,
+          status: table.active ? ('available' as const) : ('reserved' as const),
+        }))
+      );
+      const employees = usersPage.content.map(employeeFromDto);
+      const customers = customersPage.content.map(customerFromDto);
+      const orders = ordersPage.content.map((order) =>
+        orderFromDto(order, tables, employees, customers)
+      );
+      const occupiedTableIds = new Set(
+        ordersPage.content
+          .filter((order) => order.status === 'DRAFT' && order.tableId)
+          .map((order) => String(order.tableId))
+      );
+      const tablesWithStatus = tables.map((table) => ({
+        ...table,
+        status: occupiedTableIds.has(table.id) ? ('occupied' as const) : table.status,
+      }));
+      const coupons: Coupon[] = [
+        ...couponsDto.map((coupon) => ({
+          id: String(coupon.id),
+          code: coupon.code,
+          type: coupon.discountType === 'PERCENTAGE' ? ('percent' as const) : ('flat' as const),
+          value: Number(coupon.discountValue),
+          active: true,
+          minOrder: 0,
+          promoType: 'manual' as const,
+        })),
+        ...promotions.map((promotion) => ({
+          id: `promotion-${promotion.id}`,
+          code: promotion.name,
+          type: promotion.discountType === 'PERCENTAGE' ? ('percent' as const) : ('flat' as const),
+          value: Number(promotion.discountValue),
+          active: true,
+          minOrder: Number(promotion.minOrderAmount ?? 0),
+          promoType: promotion.appliesTo === 'PRODUCT' ? ('auto_product' as const) : ('auto_order' as const),
+          applyTo: promotion.appliesTo.toLowerCase() as 'product' | 'order',
+          productId: promotion.productId ? String(promotion.productId) : undefined,
+          minQty: promotion.minQuantity ?? undefined,
+          orderThreshold: promotion.minOrderAmount ?? undefined,
+        })),
+      ];
+      set({
+        products: productsPage.content.map(productFromDto),
+        categories: categories.map(categoryFromDto),
+        floors,
+        tables: tablesWithStatus,
+        employees,
+        coupons,
+        paymentMethods: methods.map(paymentFromDto),
+        customers,
+        orders,
+        selfOrderEnabled: config.enabled,
+        selfOrderMode: config.mode === 'ONLINE_ORDERING' ? 'online' : 'qr_menu',
+        selfOrderBgColor: config.backgroundColor ?? '#1E3932',
+        selfOrderImages: config.backgroundImageUrl ? [config.backgroundImageUrl] : [],
+        loading: false,
+        hydrated: true,
+      });
+    } catch (error) {
+      set({ loading: false });
+      throw error;
     }
-  )
-);
+  },
 
-export function categoryName(cats: Category[], id: string): string {
-  return cats.find((c) => c.id === id)?.name ?? 'Uncategorised';
+  refreshOrders: async () => {
+    const page = await api<PageResponse<OrderDto>>('/api/orders?size=500');
+    const occupiedTableIds = new Set(
+      page.content
+        .filter((order) => order.status === 'DRAFT' && order.tableId)
+        .map((order) => String(order.tableId))
+    );
+    set({
+      orders: page.content.map((order) =>
+        orderFromDto(order, get().tables, get().employees, get().customers)
+      ),
+      tables: get().tables.map((table) => ({
+        ...table,
+        status: occupiedTableIds.has(table.id)
+          ? 'occupied'
+          : table.status === 'reserved'
+            ? 'reserved'
+            : 'available',
+      })),
+    });
+  },
+
+  setSelfOrderEnabled: async (enabled) => {
+    await api('/api/self-order/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled,
+        mode: get().selfOrderMode === 'online' ? 'ONLINE_ORDERING' : 'QR_MENU',
+        backgroundColor: get().selfOrderBgColor,
+        backgroundImageUrl: get().selfOrderImages[0],
+      }),
+    });
+    set({ selfOrderEnabled: enabled });
+  },
+  setSelfOrderMode: async (mode) => {
+    await api('/api/self-order/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled: get().selfOrderEnabled,
+        mode: mode === 'online' ? 'ONLINE_ORDERING' : 'QR_MENU',
+        backgroundColor: get().selfOrderBgColor,
+        backgroundImageUrl: get().selfOrderImages[0],
+      }),
+    });
+    set({ selfOrderMode: mode });
+  },
+  setSelfOrderBgColor: async (backgroundColor) => {
+    await api('/api/self-order/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled: get().selfOrderEnabled,
+        mode: get().selfOrderMode === 'online' ? 'ONLINE_ORDERING' : 'QR_MENU',
+        backgroundColor,
+        backgroundImageUrl: get().selfOrderImages[0],
+      }),
+    });
+    set({ selfOrderBgColor: backgroundColor });
+  },
+  setSelfOrderImages: async (images) => {
+    await api('/api/self-order/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled: get().selfOrderEnabled,
+        mode: get().selfOrderMode === 'online' ? 'ONLINE_ORDERING' : 'QR_MENU',
+        backgroundColor: get().selfOrderBgColor,
+        backgroundImageUrl: images[0] || null,
+      }),
+    });
+    set({ selfOrderImages: images.filter(Boolean) });
+  },
+
+  saveProduct: async (product) => {
+    const existing = get().products.some((item) => item.id === product.id);
+    const dto = await api<ProductDto>(existing ? `/api/products/${product.id}` : '/api/products', {
+      method: existing ? 'PUT' : 'POST',
+      body: JSON.stringify({
+        name: product.name,
+        categoryId: Number(product.categoryId),
+        price: product.price,
+        unitOfMeasure: product.uom === 'g' ? 'KG' : product.uom === 'ml' ? 'LITRE' : 'PIECE',
+        description: product.description,
+        showOnKds: product.available,
+      }),
+    });
+    const saved = productFromDto(dto);
+    set((state) => ({
+      products: existing
+        ? state.products.map((item) => (item.id === product.id ? saved : item))
+        : [...state.products, saved],
+    }));
+  },
+  deleteProduct: async (id) => {
+    await api(`/api/products/${id}`, { method: 'DELETE' });
+    set((state) => ({ products: state.products.filter((item) => item.id !== id) }));
+  },
+  deleteProducts: async (ids) => {
+    await Promise.all(ids.map((id) => get().deleteProduct(id)));
+  },
+  saveCategory: async (category) => {
+    const existing = get().categories.some((item) => item.id === category.id);
+    const dto = await api<CategoryDto>(
+      existing ? `/api/categories/${category.id}` : '/api/categories',
+      {
+        method: existing ? 'PUT' : 'POST',
+        body: JSON.stringify({ name: category.name, colorHex: category.color }),
+      }
+    );
+    const saved = categoryFromDto(dto);
+    set((state) => ({
+      categories: existing
+        ? state.categories.map((item) => (item.id === category.id ? saved : item))
+        : [...state.categories, saved],
+    }));
+  },
+  deleteCategory: async (id) => {
+    await api(`/api/categories/${id}`, { method: 'DELETE' });
+    set((state) => ({ categories: state.categories.filter((item) => item.id !== id) }));
+  },
+  reorderCategories: (categories) => set({ categories }),
+
+  saveEmployee: async (employee) => {
+    const existing = get().employees.some((item) => item.id === employee.id);
+    const dto = await api<UserDto>(existing ? `/api/users/${employee.id}` : '/api/users', {
+      method: existing ? 'PUT' : 'POST',
+      body: JSON.stringify({
+        name: employee.name,
+        email: employee.email,
+        role: employee.role,
+        ...(existing ? { active: employee.active } : { password: employee.pin }),
+      }),
+    });
+    const saved = employeeFromDto(dto);
+    set((state) => ({
+      employees: existing
+        ? state.employees.map((item) => (item.id === employee.id ? saved : item))
+        : [...state.employees, saved],
+    }));
+  },
+  deleteEmployee: async (id) => {
+    await api(`/api/users/${id}`, { method: 'DELETE' });
+    set((state) => ({ employees: state.employees.filter((item) => item.id !== id) }));
+  },
+  deleteEmployees: async (ids) => Promise.all(ids.map((id) => get().deleteEmployee(id))).then(() => undefined),
+  archiveEmployee: async (id) => {
+    const dto = await api<UserDto>(`/api/users/${id}/archive`, { method: 'PUT' });
+    set((state) => ({
+      employees: state.employees.map((item) => (item.id === id ? employeeFromDto(dto) : item)),
+    }));
+  },
+  archiveEmployees: async (ids) => Promise.all(ids.map((id) => get().archiveEmployee(id))).then(() => undefined),
+  changeEmployeePin: async (id, pin) => {
+    await api(`/api/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password: pin }) });
+  },
+
+  saveCoupon: async (coupon) => {
+    const promotion = coupon.promoType !== 'manual';
+    const numericId = coupon.id.replace('promotion-', '');
+    const existing = promotion
+      ? get().coupons.some((item) => item.id === coupon.id)
+      : get().coupons.some((item) => item.id === coupon.id);
+    if (promotion) {
+      await api(existing ? `/api/promotions/${numericId}` : '/api/promotions', {
+        method: existing ? 'PUT' : 'POST',
+        body: JSON.stringify({
+          name: coupon.code,
+          appliesTo: coupon.applyTo === 'product' ? 'PRODUCT' : 'ORDER',
+          productId: coupon.productId ? Number(coupon.productId) : null,
+          minQuantity: coupon.minQty,
+          minOrderAmount: coupon.orderThreshold,
+          discountType: coupon.type === 'percent' ? 'PERCENTAGE' : 'FIXED',
+          discountValue: coupon.value,
+        }),
+      });
+    } else {
+      await api(existing ? `/api/coupons/${coupon.id}` : '/api/coupons', {
+        method: existing ? 'PUT' : 'POST',
+        body: JSON.stringify({
+          code: coupon.code,
+          discountType: coupon.type === 'percent' ? 'PERCENTAGE' : 'FIXED',
+          discountValue: coupon.value,
+        }),
+      });
+    }
+    await get().hydrate();
+  },
+  deleteCoupon: async (id) => {
+    const promotion = id.startsWith('promotion-');
+    await api(
+      promotion ? `/api/promotions/${id.replace('promotion-', '')}` : `/api/coupons/${id}`,
+      { method: 'DELETE' }
+    );
+    set((state) => ({ coupons: state.coupons.filter((item) => item.id !== id) }));
+  },
+
+  saveTable: async (table) => {
+    const existing = get().tables.some((item) => item.id === table.id);
+    const dto = await api<{ id: number; floorId: number; tableNumber: string; seats: number; active: boolean }>(
+      existing ? `/api/tables/${table.id}` : `/api/floors/${table.floorId}/tables`,
+      {
+        method: existing ? 'PUT' : 'POST',
+        body: JSON.stringify({
+          tableNumber: table.label,
+          seats: table.seats,
+          active: table.status !== 'reserved',
+        }),
+      }
+    );
+    const saved: FloorTable = {
+      id: String(dto.id),
+      floorId: String(dto.floorId),
+      label: dto.tableNumber,
+      seats: dto.seats,
+      status: dto.active ? 'available' : 'reserved',
+    };
+    set((state) => ({
+      tables: existing
+        ? state.tables.map((item) => (item.id === table.id ? saved : item))
+        : [...state.tables, saved],
+    }));
+  },
+  deleteTable: async (id) => {
+    await api(`/api/tables/${id}`, { method: 'DELETE' });
+    set((state) => ({ tables: state.tables.filter((item) => item.id !== id) }));
+  },
+  addFloor: async (name) => {
+    const dto = await api<FloorDto>('/api/floors', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+    set((state) => ({ floors: [...state.floors, { id: String(dto.id), name: dto.name }] }));
+  },
+
+  savePaymentMethod: async (method) => {
+    const dto = await api<PaymentMethodDto>(`/api/payment-methods/${method.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: method.enabled, upiId: method.upiId }),
+    });
+    set((state) => ({
+      paymentMethods: state.paymentMethods.map((item) =>
+        item.id === method.id ? paymentFromDto(dto) : item
+      ),
+    }));
+  },
+  deletePaymentMethod: async () => undefined,
+  togglePaymentMethod: async (id) => {
+    const method = get().paymentMethods.find((item) => item.id === id);
+    if (method) await get().savePaymentMethod({ ...method, enabled: !method.enabled });
+  },
+
+  addOrder: (order) => set((state) => ({ orders: [order, ...state.orders] })),
+  updateOrder: (id, patch) =>
+    set((state) => ({ orders: state.orders.map((order) => (order.id === id ? { ...order, ...patch } : order)) })),
+  deleteOrder: async (id) => {
+    await api(`/api/orders/${id}`, { method: 'DELETE' });
+    set((state) => ({ orders: state.orders.filter((order) => order.id !== id) }));
+  },
+  saveCustomer: async (customer) => {
+    const existing = get().customers.some((item) => item.id === customer.id);
+    const dto = await api<CustomerDto>(existing ? `/api/customers/${customer.id}` : '/api/customers', {
+      method: existing ? 'PUT' : 'POST',
+      body: JSON.stringify({ name: customer.name, email: customer.email, phone: customer.phone }),
+    });
+    const saved = customerFromDto(dto);
+    set((state) => ({
+      customers: existing
+        ? state.customers.map((item) => (item.id === customer.id ? saved : item))
+        : [...state.customers, saved],
+    }));
+  },
+  deleteCustomer: async (id) => {
+    await api(`/api/customers/${id}`, { method: 'DELETE' });
+    set((state) => ({ customers: state.customers.filter((item) => item.id !== id) }));
+  },
+}));
+
+export function categoryName(categories: Category[], id: string): string {
+  return categories.find((category) => category.id === id)?.name ?? 'Uncategorised';
 }
-export function categoryColor(cats: Category[], id: string): string {
-  return cats.find((c) => c.id === id)?.color ?? CATEGORY_PALETTE[0];
+
+export function categoryColor(categories: Category[], id: string): string {
+  return categories.find((category) => category.id === id)?.color ?? CATEGORY_PALETTE[0];
 }
