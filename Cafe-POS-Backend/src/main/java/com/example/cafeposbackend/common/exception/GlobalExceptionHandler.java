@@ -40,7 +40,8 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(BusinessRuleException.class)
   ResponseEntity<ApiResponse<Void>> business(BusinessRuleException ex) {
-    return error(HttpStatus.UNPROCESSABLE_ENTITY, "BUSINESS_RULE", ex.getMessage(), null);
+    // HttpStatus.UNPROCESSABLE_ENTITY is deprecated since Spring 7.0; use numeric value 422
+    return error(HttpStatus.valueOf(422), "BUSINESS_RULE", ex.getMessage(), null);
   }
 
   @ExceptionHandler(DataIntegrityViolationException.class)
