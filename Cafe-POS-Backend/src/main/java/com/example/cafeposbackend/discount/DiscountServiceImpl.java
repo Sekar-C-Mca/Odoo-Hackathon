@@ -50,6 +50,14 @@ public class DiscountServiceImpl implements CouponService {
   @Override
   public DiscountResult validate(String code, BigDecimal orderTotal) {
     Coupon coupon = getEntity(code);
+    if (!coupon.isActive()) {
+      throw new BusinessRuleException("Coupon is inactive");
+    }
+    if (coupon.getMinOrderAmount() != null
+        && orderTotal.compareTo(coupon.getMinOrderAmount()) < 0) {
+      throw new BusinessRuleException(
+          "Minimum order amount is " + coupon.getMinOrderAmount().stripTrailingZeros());
+    }
     BigDecimal amount = calculate(coupon.getDiscountType(), coupon.getDiscountValue(), orderTotal);
     return new DiscountResult(
         coupon.getId(),
@@ -78,10 +86,17 @@ public class DiscountServiceImpl implements CouponService {
     coupon.setCode(request.code().trim().toUpperCase());
     coupon.setDiscountType(request.discountType());
     coupon.setDiscountValue(request.discountValue());
+    coupon.setMinOrderAmount(request.minOrderAmount());
+    coupon.setActive(request.active() == null || request.active());
   }
 
   private CouponResponse map(Coupon coupon) {
     return new CouponResponse(
-        coupon.getId(), coupon.getCode(), coupon.getDiscountType(), coupon.getDiscountValue());
+        coupon.getId(),
+        coupon.getCode(),
+        coupon.getDiscountType(),
+        coupon.getDiscountValue(),
+        coupon.getMinOrderAmount(),
+        coupon.isActive());
   }
 }

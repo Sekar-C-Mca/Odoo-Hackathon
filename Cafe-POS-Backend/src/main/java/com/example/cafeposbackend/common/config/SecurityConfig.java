@@ -73,6 +73,8 @@ public class SecurityConfig {
                         "/api/self-order/menu/**",
                         "/api/self-order/order/**",
                         "/api/customer-display/**",
+                        "/api/kds/**",
+                        "/ws/kds/**",
                         "/ws/self-order/**")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/self-order/config")
@@ -104,14 +106,14 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "EMPLOYEE")
                     .requestMatchers(HttpMethod.POST, "/api/coupons/validate")
                     .hasAnyRole("ADMIN", "EMPLOYEE")
+                    .requestMatchers(HttpMethod.GET, "/api/coupons", "/api/promotions")
+                    .hasAnyRole("ADMIN", "EMPLOYEE")
                     .requestMatchers(
                         "/api/users/**", "/api/reports/**", "/api/promotions/**", "/api/coupons/**")
                     .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/sessions")
                     .hasRole("ADMIN")
                     .requestMatchers("/api/sessions/**", "/api/customers/**", "/api/orders/**")
-                    .hasAnyRole("ADMIN", "EMPLOYEE")
-                    .requestMatchers("/api/kds/**", "/ws/kds/**")
                     .hasAnyRole("ADMIN", "EMPLOYEE")
                     .requestMatchers("/api/self-order/**")
                     .hasRole("ADMIN")

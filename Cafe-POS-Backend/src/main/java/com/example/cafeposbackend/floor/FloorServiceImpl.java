@@ -1,6 +1,7 @@
 package com.example.cafeposbackend.floor;
 
 import com.example.cafeposbackend.common.enums.OrderStatus;
+import com.example.cafeposbackend.common.exception.BusinessRuleException;
 import com.example.cafeposbackend.common.exception.ResourceNotFoundException;
 import com.example.cafeposbackend.floor.FloorDtos.*;
 import com.example.cafeposbackend.order.Order;
@@ -47,7 +48,11 @@ public class FloorServiceImpl implements FloorService {
 
   @Override
   public void delete(Long id) {
-    floorRepository.delete(findFloor(id));
+    Floor floor = findFloor(id);
+    if (tableRepository.existsByFloorId(id)) {
+      throw new BusinessRuleException("Delete all tables on this floor before deleting the floor");
+    }
+    floorRepository.delete(floor);
   }
 
   @Override

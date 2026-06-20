@@ -21,4 +21,10 @@ public class Coupon extends BaseEntity {
 
   @Column(name = "discount_value", nullable = false, precision = 10, scale = 2)
   private BigDecimal discountValue;
+
+  @Column(name = "min_order_amount", precision = 10, scale = 2)
+  private BigDecimal minOrderAmount;
+
+  @Column(nullable = false, columnDefinition = "boolean default true")
+  private boolean active = true;
 }

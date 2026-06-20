@@ -7,6 +7,7 @@ import com.example.cafeposbackend.product.ProductDtos.ProductRequest;
 import com.example.cafeposbackend.product.ProductDtos.ProductResponse;
 import com.example.cafeposbackend.tax.Tax;
 import com.example.cafeposbackend.tax.TaxRepository;
+import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -89,12 +90,7 @@ public class ProductServiceImpl implements ProductService {
         categoryRepository
             .findById(request.categoryId())
             .orElseThrow(() -> new ResourceNotFoundException("Category", request.categoryId()));
-    Tax tax =
-        request.taxId() == null
-            ? null
-            : taxRepository
-                .findById(request.taxId())
-                .orElseThrow(() -> new ResourceNotFoundException("Tax", request.taxId()));
+    Tax tax = resolveTax(request);
     product.setName(request.name().trim());
     product.setCategory(category);
     product.setTax(tax);
@@ -102,6 +98,27 @@ public class ProductServiceImpl implements ProductService {
     product.setUnitOfMeasure(request.unitOfMeasure());
     product.setDescription(request.description());
     product.setShowOnKds(request.showOnKds() == null || request.showOnKds());
+  }
+
+  private Tax resolveTax(ProductRequest request) {
+    if (request.taxId() != null) {
+      return taxRepository
+          .findById(request.taxId())
+          .orElseThrow(() -> new ResourceNotFoundException("Tax", request.taxId()));
+    }
+    BigDecimal rate = request.taxRate();
+    if (rate == null || rate.compareTo(BigDecimal.ZERO) == 0) {
+      return null;
+    }
+    return taxRepository
+        .findByRatePercent(rate)
+        .orElseGet(
+            () -> {
+              Tax tax = new Tax();
+              tax.setName("Tax " + rate.stripTrailingZeros().toPlainString() + "%");
+              tax.setRatePercent(rate);
+              return taxRepository.save(tax);
+            });
   }
 
   private Product find(Long id) {

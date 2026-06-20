@@ -49,6 +49,11 @@ public class GlobalExceptionHandler {
     return error(HttpStatus.CONFLICT, "DATA_CONFLICT", "Operation violates data constraints", null);
   }
 
+  @ExceptionHandler(EmailDeliveryException.class)
+  ResponseEntity<ApiResponse<Void>> emailDelivery(EmailDeliveryException ex) {
+    return error(HttpStatus.SERVICE_UNAVAILABLE, "EMAIL_DELIVERY_FAILED", ex.getMessage(), null);
+  }
+
   @ExceptionHandler(Exception.class)
   ResponseEntity<ApiResponse<Void>> unexpected(Exception ex) {
     return error(

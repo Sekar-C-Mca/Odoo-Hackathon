@@ -53,6 +53,7 @@ public class PromotionServiceImpl implements PromotionService {
   @Override
   public List<DiscountResult> evaluate(EvaluationContext context) {
     return promotionRepository.findAll().stream()
+        .filter(Promotion::isActive)
         .filter(promotion -> applies(promotion, context))
         .map(promotion -> result(promotion, context))
         .toList();
@@ -108,6 +109,7 @@ public class PromotionServiceImpl implements PromotionService {
     promotion.setMinOrderAmount(request.minOrderAmount());
     promotion.setDiscountType(request.discountType());
     promotion.setDiscountValue(request.discountValue());
+    promotion.setActive(request.active() == null || request.active());
   }
 
   private PromotionResponse map(Promotion promotion) {
@@ -119,6 +121,7 @@ public class PromotionServiceImpl implements PromotionService {
         promotion.getMinQuantity(),
         promotion.getMinOrderAmount(),
         promotion.getDiscountType(),
-        promotion.getDiscountValue());
+        promotion.getDiscountValue(),
+        promotion.isActive());
   }
 }

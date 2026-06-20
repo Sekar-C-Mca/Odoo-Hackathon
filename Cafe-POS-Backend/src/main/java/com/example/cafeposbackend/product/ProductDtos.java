@@ -13,6 +13,7 @@ public final class ProductDtos {
       @NotBlank String name,
       @NotNull Long categoryId,
       Long taxId,
+      @DecimalMin("0.00") BigDecimal taxRate,
       @NotNull @DecimalMin("0.00") BigDecimal price,
       @NotNull UnitOfMeasure unitOfMeasure,
       String description,

@@ -14,10 +14,17 @@ public final class DiscountDtos {
   public record CouponRequest(
       @NotBlank String code,
       @NotNull DiscountType discountType,
-      @NotNull @DecimalMin("0.00") BigDecimal discountValue) {}
+      @NotNull @DecimalMin("0.00") BigDecimal discountValue,
+      @DecimalMin("0.00") BigDecimal minOrderAmount,
+      Boolean active) {}
 
   public record CouponResponse(
-      Long id, String code, DiscountType discountType, BigDecimal discountValue) {}
+      Long id,
+      String code,
+      DiscountType discountType,
+      BigDecimal discountValue,
+      BigDecimal minOrderAmount,
+      boolean active) {}
 
   public record CouponValidationRequest(@NotBlank String code, @NotNull BigDecimal orderTotal) {}
 
@@ -28,7 +35,8 @@ public final class DiscountDtos {
       Integer minQuantity,
       BigDecimal minOrderAmount,
       @NotNull DiscountType discountType,
-      @NotNull BigDecimal discountValue) {}
+      @NotNull BigDecimal discountValue,
+      Boolean active) {}
 
   public record PromotionResponse(
       Long id,
@@ -38,7 +46,8 @@ public final class DiscountDtos {
       Integer minQuantity,
       BigDecimal minOrderAmount,
       DiscountType discountType,
-      BigDecimal discountValue) {}
+      BigDecimal discountValue,
+      boolean active) {}
 
   public record CartItem(Long productId, BigDecimal quantity, BigDecimal lineTotal) {}
 

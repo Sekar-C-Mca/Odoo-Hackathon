@@ -115,26 +115,9 @@ class CafePosApiEndToEndTests {
     assertThat(number(orderResult, "$.data.totalAmount")).isEqualByComparingTo("115.0");
 
     mockMvc
-        .perform(get("/api/kds/tickets").header("Authorization", bearer(employee.accessToken())))
+        .perform(get("/api/kds/tickets"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.length()").value(0));
-
-    mockMvc
-        .perform(
-            post("/api/orders/" + orderId + "/send-kitchen")
-                .header("Authorization", bearer(employee.accessToken())))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.sentToKitchen").value(true));
-    mockMvc
-        .perform(get("/api/kds/tickets").header("Authorization", bearer(employee.accessToken())))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data[0].stage").value("TO_COOK"));
-    mockMvc
-        .perform(
-            put("/api/kds/tickets/" + orderId + "/advance")
-                .header("Authorization", bearer(employee.accessToken())))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.stage").value("PREPARING"));
 
     MvcResult discounted =
         json(
@@ -157,7 +140,17 @@ class CafePosApiEndToEndTests {
                     """
                         .formatted(cashMethodId)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("PAID"));
+        .andExpect(jsonPath("$.data.status").value("PAID"))
+        .andExpect(jsonPath("$.data.sentToKitchen").value(true));
+
+    mockMvc
+        .perform(get("/api/kds/tickets"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data[0].stage").value("TO_COOK"));
+    mockMvc
+        .perform(put("/api/kds/tickets/" + orderId + "/advance"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.stage").value("PREPARING"));
 
     mockMvc
         .perform(

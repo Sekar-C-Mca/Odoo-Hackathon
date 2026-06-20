@@ -215,6 +215,10 @@ public class OrderServiceImpl implements OrderService {
             .findById(request.paymentMethodId())
             .filter(PaymentMethod::isEnabled)
             .orElseThrow(() -> new BusinessRuleException("Payment method is not enabled"));
+    boolean publishToKitchen = !order.isSentToKitchen();
+    if (publishToKitchen) {
+      order.setSentToKitchen(true);
+    }
     Payment payment = new Payment();
     payment.setOrder(order);
     payment.setPaymentMethod(method);
@@ -235,6 +239,9 @@ public class OrderServiceImpl implements OrderService {
     } else {
       displayService.pushPaymentState(order);
     }
+    if (publishToKitchen) {
+      kdsService.publish(orderId);
+    }
     return map(order);
   }
 
@@ -242,22 +249,22 @@ public class OrderServiceImpl implements OrderService {
   @Transactional(readOnly = true)
   public void sendReceipt(Long orderId, String email) {
     OrderResponse order = getById(orderId);
-    emailUtil.send(email, "Cafe POS Receipt " + order.orderNumber(), receiptText(order));
+    if (order.status() != OrderStatus.PAID) {
+      throw new BusinessRuleException("A receipt can only be emailed for a paid order");
+    }
+    emailUtil.sendReceipt(
+        email.trim().toLowerCase(),
+        "Receipt " + order.orderNumber() + " - Cafe Etoile",
+        receiptText(order),
+        receiptPdf(order),
+        "receipt-" + order.orderNumber() + ".pdf");
   }
 
   @Override
   @Transactional(readOnly = true)
   public byte[] printReceipt(Long orderId) {
     OrderResponse order = getById(orderId);
-    return pdfUtil.document(
-        "Cafe POS Receipt",
-        List.of(
-            "Order: " + order.orderNumber(),
-            "Subtotal: " + order.subtotal(),
-            "Tax: " + order.taxTotal(),
-            "Discount: " + order.discountTotal(),
-            "Total: " + order.totalAmount(),
-            "Status: " + order.status()));
+    return receiptPdf(order);
   }
 
   @Override
@@ -278,16 +285,53 @@ public class OrderServiceImpl implements OrderService {
   }
 
   private String receiptText(OrderResponse order) {
-    return "Order "
-        + order.orderNumber()
-        + "\nSubtotal: "
-        + order.subtotal()
-        + "\nTax: "
-        + order.taxTotal()
-        + "\nDiscount: "
-        + order.discountTotal()
-        + "\nTotal: "
-        + order.totalAmount();
+    List<String> lines = new ArrayList<>();
+    lines.add("Cafe Etoile");
+    lines.add("Receipt for order " + order.orderNumber());
+    lines.add("");
+    order
+        .lines()
+        .forEach(
+            line ->
+                lines.add(
+                    line.productName()
+                        + " x "
+                        + line.quantity().stripTrailingZeros().toPlainString()
+                        + " - INR "
+                        + line.lineTotal()));
+    lines.add("");
+    lines.add("Subtotal: INR " + order.subtotal());
+    lines.add("Tax: INR " + order.taxTotal());
+    lines.add("Discount: INR " + order.discountTotal());
+    lines.add("Total paid: INR " + order.totalAmount());
+    lines.add("");
+    lines.add("Thank you for visiting Cafe Etoile.");
+    lines.add("A PDF copy of this receipt is attached.");
+    return String.join("\n", lines);
+  }
+
+  private byte[] receiptPdf(OrderResponse order) {
+    List<String> lines = new ArrayList<>();
+    lines.add("Order: " + order.orderNumber());
+    lines.add("Date: " + order.createdAt());
+    lines.add("");
+    order
+        .lines()
+        .forEach(
+            line ->
+                lines.add(
+                    line.productName()
+                        + " x "
+                        + line.quantity().stripTrailingZeros().toPlainString()
+                        + " - INR "
+                        + line.lineTotal()));
+    lines.add("");
+    lines.add("Subtotal: INR " + order.subtotal());
+    lines.add("Tax: INR " + order.taxTotal());
+    lines.add("Discount: INR " + order.discountTotal());
+    lines.add("Total: INR " + order.totalAmount());
+    lines.add("Status: " + order.status());
+    return pdfUtil.document("Cafe Etoile Receipt", lines);
   }
 
   private Order requireDraft(Long id) {

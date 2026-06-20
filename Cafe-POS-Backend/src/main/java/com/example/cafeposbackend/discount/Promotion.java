@@ -36,4 +36,7 @@ public class Promotion extends BaseEntity {
 
   @Column(name = "discount_value", nullable = false, precision = 10, scale = 2)
   private BigDecimal discountValue;
+
+  @Column(nullable = false, columnDefinition = "boolean default true")
+  private boolean active = true;
 }
