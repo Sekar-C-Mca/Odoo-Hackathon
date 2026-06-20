@@ -106,3 +106,47 @@
     border-radius: 12px;
   }
 }
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  :root,
+  [data-theme='light'],
+  [data-theme='dark'] {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --border: #d1d5db;
+    --text: #111827;
+    --text-muted: #4b5563;
+    --text-faint: #6b7280;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  .print-hide,
+  [role='dialog'],
+  button,
+  input[type='checkbox'] {
+    display: none !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+}

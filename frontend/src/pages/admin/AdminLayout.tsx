@@ -35,7 +35,7 @@ export function AdminLayout() {
 
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col">
-      <header className="border-b border-border sticky top-0 z-50" style={{ background: 'var(--bg)' }}>
+      <header className="print-hide border-b border-border sticky top-0 z-50" style={{ background: 'var(--bg)' }}>
         <div className="flex items-center justify-between px-4 sm:px-6 h-16">
           <div className="flex items-center gap-3">
             <div className="font-display font-light italic text-[22px] leading-none text-text">
@@ -63,7 +63,12 @@ export function AdminLayout() {
           </nav>
 
           <div className="flex items-center gap-1">
-            <button onClick={() => toast.info('Print queued.')} className="hidden sm:flex p-2 text-text-muted hover:text-gold min-h-[40px] min-w-[40px] items-center justify-center" aria-label="Print">
+            <button
+              onClick={() => window.print()}
+              className="hidden sm:flex p-2 text-text-muted hover:text-gold min-h-[40px] min-w-[40px] items-center justify-center"
+              aria-label="Print current page"
+              title="Print current page"
+            >
               <Printer size={16} />
             </button>
             <button onClick={() => toast.info('Synced.')} className="hidden sm:flex p-2 text-text-muted hover:text-gold min-h-[40px] min-w-[40px] items-center justify-center" aria-label="Sync">
