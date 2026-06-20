@@ -146,7 +146,8 @@ class CafePosApiEndToEndTests {
     mockMvc
         .perform(get("/api/kds/tickets"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data[0].stage").value("TO_COOK"));
+        .andExpect(jsonPath("$.data[0].stage").value("TO_COOK"))
+        .andExpect(jsonPath("$.data[0].employeeId").value(employee.userId()));
     mockMvc
         .perform(put("/api/kds/tickets/" + orderId + "/advance"))
         .andExpect(status().isOk())
@@ -295,6 +296,7 @@ class CafePosApiEndToEndTests {
             .andExpect(jsonPath("$.success").value(true))
             .andReturn();
     return new Auth(
+        ((Number) JsonPath.read(body(result), "$.data.userId")).longValue(),
         JsonPath.read(body(result), "$.data.accessToken"),
         JsonPath.read(body(result), "$.data.refreshToken"));
   }
@@ -332,5 +334,5 @@ class CafePosApiEndToEndTests {
     return "Bearer " + token;
   }
 
-  private record Auth(String accessToken, String refreshToken) {}
+  private record Auth(long userId, String accessToken, String refreshToken) {}
 }

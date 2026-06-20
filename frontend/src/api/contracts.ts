@@ -125,6 +125,7 @@ export interface KdsTicketDto {
   orderId: number;
   orderNumber: string;
   tableNumber: string | null;
+  employeeId: number;
   stage: 'TO_COOK' | 'PREPARING' | 'COMPLETED';
   createdAt: string;
   items: Array<{

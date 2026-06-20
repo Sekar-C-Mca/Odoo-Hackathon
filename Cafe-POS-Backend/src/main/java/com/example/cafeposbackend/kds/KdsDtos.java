@@ -17,6 +17,7 @@ public final class KdsDtos {
       Long orderId,
       String orderNumber,
       String tableNumber,
+      Long employeeId,
       KdsItemStatus stage,
       LocalDateTime createdAt,
       List<KdsItemResponse> items) {}

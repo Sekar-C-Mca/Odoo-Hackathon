@@ -113,6 +113,7 @@ public class KdsServiceImpl implements KdsService {
         order.getId(),
         order.getOrderNumber(),
         order.getTable() == null ? null : order.getTable().getTableNumber(),
+        order.getEmployee().getId(),
         stage(lines),
         order.getCreatedAt(),
         lines.stream()

@@ -16,6 +16,7 @@ export interface KDSTicket {
   id: string;
   orderNum: string;
   tableLabel: string;
+  employeeId: string;
   stage: KDSStage;
   items: KDSItem[];
   createdAt: number;
@@ -35,6 +36,7 @@ const fromDto = (ticket: KdsTicketDto): KDSTicket => ({
   id: String(ticket.orderId),
   orderNum: ticket.orderNumber,
   tableLabel: ticket.tableNumber ?? 'Takeaway',
+  employeeId: String(ticket.employeeId),
   stage: ticket.stage.toLowerCase() as KDSStage,
   createdAt: new Date(ticket.createdAt).getTime(),
   items: ticket.items.map((item) => ({

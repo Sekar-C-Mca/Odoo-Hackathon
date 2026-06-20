@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Filter, X } from 'lucide-react';
+import { Check, Filter, Play, X } from 'lucide-react';
 import { useKDSStore, type KDSStage } from '../../store/kdsStore';
 import { useCatalogStore } from '../../store/catalogStore';
 import { toast } from '../../components/ui/Toast';
@@ -18,6 +18,7 @@ export function KDSPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterProducts, setFilterProducts] = useState<Set<string>>(new Set());
   const [filterCategories, setFilterCategories] = useState<Set<string>>(new Set());
+  const [updatingTickets, setUpdatingTickets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     void hydrate().catch((cause) =>
@@ -56,6 +57,22 @@ export function KDSPage() {
 
   const uniqueItems = [...new Set(tickets.flatMap((t) => t.items.map((i) => i.name)))];
 
+  const changeTicketStage = async (ticketId: string) => {
+    if (updatingTickets.has(ticketId)) return;
+    setUpdatingTickets((current) => new Set(current).add(ticketId));
+    try {
+      await advanceStage(ticketId);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to update ticket.');
+    } finally {
+      setUpdatingTickets((current) => {
+        const next = new Set(current);
+        next.delete(ticketId);
+        return next;
+      });
+    }
+  };
+
   const renderColumn = (stage: KDSStage) => {
     const col = filtered.filter((t) => t.stage === stage);
     const stg = stages.find((s) => s.id === stage)!;
@@ -70,6 +87,7 @@ export function KDSPage() {
           {col.length === 0 && <p className="text-[17px] font-normal text-[#AAA69E] py-5">No tickets.</p>}
           {col.map((t) => {
             const allDone = t.items.every((i) => i.done);
+            const updating = updatingTickets.has(t.id);
             return (
               <div
                 key={t.id}
@@ -80,31 +98,29 @@ export function KDSPage() {
                   opacity: allDone && stage === 'completed' ? 0.5 : 1,
                 }}
               >
-                <button
-                  onClick={() =>
-                    void advanceStage(t.id).catch((cause) =>
-                      toast.error(cause instanceof Error ? cause.message : 'Unable to advance ticket.')
-                    )
-                  }
-                  className="w-full text-left mb-4"
-                  title="Click to advance stage"
-                >
+                <div className="mb-4">
                   <div className="flex items-baseline justify-between">
                     <span className="font-display text-[26px] sm:text-[30px]" style={{ color: stg.color }}>{t.orderNum}</span>
                     <span className="text-[14px] sm:text-[16px] tracking-[0.12em] uppercase font-normal text-[#AAA69E]">Table {t.tableLabel}</span>
                   </div>
-                </button>
-                {t.items.map((i) => (
-                  <button
-                    key={i.id}
-                    onClick={() =>
-                      void markItemDone(t.id, i.id).catch((cause) =>
-                        toast.error(cause instanceof Error ? cause.message : 'Unable to update item.')
-                      )
-                    }
-                    className="w-full flex items-center justify-between py-3 border-b last:border-0"
-                    style={{ borderColor: 'rgba(255,255,255,0.09)' }}
-                  >
+                  <div className="mt-1 text-[13px] tracking-[0.16em] uppercase text-[#AAA69E]">
+                    {stage === 'to_cook' ? 'Waiting to be started' : stage === 'preparing' ? 'Currently being prepared' : 'Order finished'}
+                  </div>
+                </div>
+                {t.items.map((i) => {
+                  const canCompleteItem = stage === 'preparing' && !i.done;
+                  return (
+                    <button
+                      key={i.id}
+                      disabled={!canCompleteItem}
+                      onClick={() =>
+                        void markItemDone(t.id, i.id).catch((cause) =>
+                          toast.error(cause instanceof Error ? cause.message : 'Unable to update item.')
+                        )
+                      }
+                      className="w-full flex items-center justify-between py-3 border-b last:border-0 disabled:cursor-default"
+                      style={{ borderColor: 'rgba(255,255,255,0.09)' }}
+                    >
                     <span
                       className="text-[17px] sm:text-[19px] font-normal"
                       style={{
@@ -114,9 +130,31 @@ export function KDSPage() {
                     >
                       {i.name}
                     </span>
-                    <span className="font-body font-semibold text-[20px] sm:text-[22px]" style={{ color: i.done ? 'rgba(255,255,255,0.45)' : '#D4E9E2' }}>×{i.qty}</span>
+                    <span className="flex items-center gap-2">
+                      {i.done && <Check size={16} className="text-[#00A862]" />}
+                      <span className="font-body font-semibold text-[20px] sm:text-[22px]" style={{ color: i.done ? 'rgba(255,255,255,0.45)' : '#D4E9E2' }}>×{i.qty}</span>
+                    </span>
+                    </button>
+                  );
+                })}
+                {stage !== 'completed' && (
+                  <button
+                    disabled={updating}
+                    onClick={() => void changeTicketStage(t.id)}
+                    className="mt-5 w-full min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 text-[15px] font-semibold uppercase tracking-[0.12em] disabled:opacity-50"
+                    style={{
+                      color: stage === 'to_cook' ? '#1E3932' : '#FFFFFF',
+                      background: stage === 'to_cook' ? '#D4E9E2' : '#00754A',
+                    }}
+                  >
+                    {stage === 'to_cook' ? <Play size={16} /> : <Check size={16} />}
+                    {updating
+                      ? 'Updating...'
+                      : stage === 'to_cook'
+                        ? 'Start preparing'
+                        : 'Mark order completed'}
                   </button>
-                ))}
+                )}
               </div>
             );
           })}
