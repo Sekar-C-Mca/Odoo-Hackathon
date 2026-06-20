@@ -1,0 +1,68 @@
+import { useState } from 'react';
+import { X } from 'lucide-react';
+import { useCatalogStore } from '../../store/catalogStore';
+import { useCartStore } from '../../store/cartStore';
+import { SectionLabel } from '../../components/ui';
+
+export function FloorPopup({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { floors, tables, saveTable } = useCatalogStore();
+  const { setTable, clearCart } = useCartStore();
+  const [activeFloor, setActiveFloor] = useState(floors[0]?.id ?? '');
+
+  if (!open) return null;
+
+  const floorTables = tables.filter((t) => t.floorId === activeFloor);
+
+  const select = (id: string, label: string) => {
+    setTable(id, label);
+    saveTable({ ...tables.find((t) => t.id === id)!, status: 'occupied' });
+    clearCart();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto border border-border p-6" style={{ background: 'var(--surface)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-display font-light italic text-[28px] leading-none text-text">Select a <span className="text-gold">table</span></h3>
+            <p className="mt-2 text-[14px] tracking-[0.22em] uppercase font-extralight text-text-muted">Floor plan</p>
+          </div>
+          <button onClick={onClose} className="text-text-faint hover:text-gold p-2 min-h-[40px] min-w-[40px] flex items-center justify-center" aria-label="Close"><X size={18} /></button>
+        </div>
+        <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar">
+          {floors.map((f) => (
+            <button key={f.id} onClick={() => setActiveFloor(f.id)} className={`px-4 py-2 text-[15px] tracking-[0.18em] uppercase font-light whitespace-nowrap min-h-[40px] ${activeFloor === f.id ? 'text-gold border border-[rgba(0,117,74,0.4)] bg-[rgba(0,117,74,0.05)]' : 'text-text-muted border border-border'}`}>
+              {f.name}
+            </button>
+          ))}
+        </div>
+        <SectionLabel>{floorTables.length} tables</SectionLabel>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {floorTables.map((t) => {
+            const occupied = t.status === 'occupied';
+            const reserved = t.status === 'reserved';
+            return (
+              <button
+                key={t.id}
+                onClick={() => select(t.id, t.label)}
+                disabled={reserved}
+                className="aspect-[4/3] flex flex-col items-center justify-center border p-4 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  background: occupied ? 'rgba(0,117,74,0.06)' : 'var(--surface-raised)',
+                  borderColor: occupied ? 'rgba(0,117,74,0.35)' : 'var(--border)',
+                }}
+              >
+                <span className="font-display text-[28px] text-text leading-none">{t.label}</span>
+                <span className="mt-2 text-[14px] tracking-[0.18em] uppercase font-extralight text-text-faint">{t.seats} seats</span>
+                {occupied && <span className="mt-2 w-1.5 h-1.5 bg-gold" />}
+                {reserved && <span className="mt-2 text-[14px] tracking-[0.18em] uppercase text-cancel">Reserved</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
