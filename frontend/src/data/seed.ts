@@ -22,6 +22,8 @@ export interface FloorTable {
   floorId: string;
   seats: number;
   status: 'available' | 'occupied' | 'reserved';
+  occupiedById?: string | null;
+  occupiedByName?: string | null;
   token?: string;
 }
 
@@ -71,6 +73,7 @@ export interface Order {
   total: number;
   customerId?: string | null;
   customer?: string;
+  employeeId?: string;
   employeeName?: string;
   sessionId?: string;
   items: { productId?: string; name: string; qty: number; price: number; discount?: number }[];

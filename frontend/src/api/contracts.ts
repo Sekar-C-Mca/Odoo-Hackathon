@@ -23,6 +23,8 @@ export interface TableDto {
   tableNumber: string;
   seats: number;
   active: boolean;
+  occupiedById: number | null;
+  occupiedByName: string | null;
 }
 
 export interface FloorDto {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { SectionLabel, Badge, Button } from '../../components/ui';
 import { FloorPopup } from './FloorPopup';
@@ -6,26 +6,55 @@ import { useCatalogStore } from '../../store/catalogStore';
 import { useCartStore } from '../../store/cartStore';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '../../components/ui/Toast';
+import { useAuthStore } from '../../store/authStore';
 
 const statusVariant = (s: string) =>
   s === 'occupied' ? 'paid' : s === 'reserved' ? 'cancel' : 'stone';
 
 export function TablesView() {
-  const { floors, tables, orders, saveTable } = useCatalogStore();
+  const { floors, tables, orders, claimTable, releaseTable, refreshTables, refreshOrders } = useCatalogStore();
   const { setTable, loadOrder, clearCart } = useCartStore();
+  const user = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const [floorOpen, setFloorOpen] = useState(false);
   const [activeFloor, setActiveFloor] = useState(floors[0]?.id ?? '');
 
   const floorTables = tables.filter((t) => t.floorId === activeFloor);
 
-  const select = (id: string, label: string, status: string) => {
-    if (status === 'reserved') return;
-    setTable(id, label);
-    if (status === 'available') {
-      saveTable({ ...tables.find((t) => t.id === id)!, status: 'occupied' });
+  useEffect(() => {
+    const refresh = () => {
+      void Promise.all([refreshTables(), refreshOrders()]).catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => window.clearInterval(timer);
+  }, [refreshOrders, refreshTables]);
+
+  const select = async (id: string, label: string) => {
+    const table = tables.find((item) => item.id === id);
+    if (!table || table.status === 'reserved') return;
+    if (table.occupiedById && table.occupiedById !== user?.id) {
+      toast.error(`Table ${label} is being served by ${table.occupiedByName ?? 'another cashier'}.`);
+      return;
     }
-    const existingDraft = orders.find((o) => o.status === 'draft' && o.tableLabel === label);
+    const existingDraft = orders.find(
+      (order) =>
+        order.status === 'draft' &&
+        order.tableId === id &&
+        order.employeeId === user?.id
+    );
+    if (table.status === 'occupied' && !existingDraft) {
+      toast.info(`Table ${label} is still in service. Mark it free before starting another order.`);
+      return;
+    }
+    try {
+      await claimTable(id);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to claim table.');
+      await refreshTables();
+      return;
+    }
+    setTable(id, label);
     if (existingDraft) {
       const cartItems = existingDraft.items.map((i) => ({
         id: i.productId ?? '',
@@ -50,6 +79,15 @@ export function TablesView() {
     navigate('/pos');
   };
 
+  const markFree = async (id: string, label: string) => {
+    try {
+      await releaseTable(id);
+      toast.success(`Table ${label} is now available.`);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to free table.');
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6">
       <PageHeader
@@ -65,22 +103,43 @@ export function TablesView() {
       </div>
       <SectionLabel>{floorTables.length} tables</SectionLabel>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-        {floorTables.map((t) => (
-          <button
+        {floorTables.map((t) => {
+          const ownedByCurrentUser = t.occupiedById === user?.id;
+          const occupiedByOther = Boolean(t.occupiedById && !ownedByCurrentUser);
+          const ownDraft = orders.some(
+            (order) => order.status === 'draft' && order.tableId === t.id && order.employeeId === user?.id
+          );
+          return (
+          <div
             key={t.id}
-            onClick={() => select(t.id, t.label, t.status)}
-            disabled={t.status === 'reserved'}
-            className="aspect-[4/3] flex flex-col items-center justify-center border p-4 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="aspect-[4/3] flex flex-col items-center justify-center border p-4 transition-colors"
             style={{
               background: t.status === 'occupied' ? 'rgba(0,117,74,0.06)' : 'var(--surface-raised)',
               borderColor: t.status === 'occupied' ? 'rgba(0,117,74,0.35)' : 'var(--border)',
             }}
           >
-            <span className="font-display text-[26px] text-text leading-none">{t.label}</span>
-            <span className="mt-2 text-[14px] tracking-[0.18em] uppercase font-extralight text-text-faint">{t.seats} seats</span>
-            <div className="mt-2"><Badge variant={statusVariant(t.status)}>{t.status}</Badge></div>
-          </button>
-        ))}
+            <button
+              onClick={() => void select(t.id, t.label)}
+              disabled={t.status === 'reserved' || occupiedByOther}
+              className="flex w-full flex-1 flex-col items-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="font-display text-[26px] text-text leading-none">{t.label}</span>
+              <span className="mt-2 text-[14px] tracking-[0.18em] uppercase font-extralight text-text-faint">{t.seats} seats</span>
+              <div className="mt-2"><Badge variant={statusVariant(t.status)}>{t.status}</Badge></div>
+              {t.occupiedByName && (
+                <span className="mt-2 text-[12px] uppercase tracking-[0.12em] text-text-faint">
+                  {ownedByCurrentUser ? 'Your table' : `Serving: ${t.occupiedByName}`}
+                </span>
+              )}
+            </button>
+            {ownedByCurrentUser && !ownDraft && (
+              <Button size="sm" variant="ghost" onClick={() => void markFree(t.id, t.label)}>
+                Mark free
+              </Button>
+            )}
+          </div>
+          );
+        })}
       </div>
       <FloorPopup open={floorOpen} onClose={() => setFloorOpen(false)} />
     </div>

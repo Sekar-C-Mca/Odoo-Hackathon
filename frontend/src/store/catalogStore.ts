@@ -9,6 +9,7 @@ import type {
   PaymentMethodDto,
   ProductDto,
   PromotionDto,
+  TableDto,
   UserDto,
 } from '../api/contracts';
 import {
@@ -61,6 +62,9 @@ interface CatalogState {
   saveCoupon: (coupon: Coupon) => Promise<void>;
   deleteCoupon: (id: string) => Promise<void>;
   saveTable: (table: FloorTable) => Promise<void>;
+  refreshTables: () => Promise<void>;
+  claimTable: (id: string) => Promise<void>;
+  releaseTable: (id: string) => Promise<void>;
   deleteTable: (id: string) => Promise<void>;
   addFloor: (name: string) => Promise<Floor>;
   deleteFloor: (id: string) => Promise<void>;
@@ -149,6 +153,7 @@ const orderFromDto = (
   total: Number(value.totalAmount),
   customerId: value.customerId ? String(value.customerId) : null,
   customer: customers.find((customer) => customer.id === String(value.customerId))?.name,
+  employeeId: String(value.employeeId),
   employeeName: employees.find((employee) => employee.id === String(value.employeeId))?.name,
   sessionId: String(value.sessionId),
   items: value.lines.map((line) => ({
@@ -176,6 +181,23 @@ interface SelfOrderConfigDto {
   backgroundColor?: string;
   backgroundImageUrl?: string;
 }
+
+const tablesFromFloors = (floorsDto: FloorDto[]): FloorTable[] =>
+  floorsDto.flatMap((floor) =>
+    floor.tables.map((table) => ({
+      id: String(table.id),
+      label: table.tableNumber,
+      floorId: String(table.floorId),
+      seats: table.seats,
+      status: !table.active
+        ? ('reserved' as const)
+        : table.occupiedById
+          ? ('occupied' as const)
+          : ('available' as const),
+      occupiedById: table.occupiedById ? String(table.occupiedById) : null,
+      occupiedByName: table.occupiedByName,
+    }))
+  );
 
 export const useCatalogStore = create<CatalogState>((set, get) => ({
   products: [],
@@ -215,29 +237,12 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         ]);
 
       const floors = floorsDto.map((floor) => ({ id: String(floor.id), name: floor.name }));
-      const tables = floorsDto.flatMap((floor) =>
-        floor.tables.map((table) => ({
-          id: String(table.id),
-          label: table.tableNumber,
-          floorId: String(table.floorId),
-          seats: table.seats,
-          status: table.active ? ('available' as const) : ('reserved' as const),
-        }))
-      );
+      const tables = tablesFromFloors(floorsDto);
       const employees = usersPage.content.map(employeeFromDto);
       const customers = customersPage.content.map(customerFromDto);
       const orders = ordersPage.content.map((order) =>
         orderFromDto(order, tables, employees, customers)
       );
-      const occupiedTableIds = new Set(
-        ordersPage.content
-          .filter((order) => order.status === 'DRAFT' && order.tableId)
-          .map((order) => String(order.tableId))
-      );
-      const tablesWithStatus = tables.map((table) => ({
-        ...table,
-        status: occupiedTableIds.has(table.id) ? ('occupied' as const) : table.status,
-      }));
       const coupons: Coupon[] = [
         ...couponsDto.map(couponFromDto),
         ...promotions.map(promotionFromDto),
@@ -246,7 +251,7 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         products: productsPage.content.map(productFromDto),
         categories: categories.map(categoryFromDto),
         floors,
-        tables: tablesWithStatus,
+        tables,
         employees,
         coupons,
         paymentMethods: methods.map(paymentFromDto),
@@ -267,24 +272,16 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
 
   refreshOrders: async () => {
     const page = await api<PageResponse<OrderDto>>('/api/orders?size=500');
-    const occupiedTableIds = new Set(
-      page.content
-        .filter((order) => order.status === 'DRAFT' && order.tableId)
-        .map((order) => String(order.tableId))
-    );
     set({
       orders: page.content.map((order) =>
         orderFromDto(order, get().tables, get().employees, get().customers)
       ),
-      tables: get().tables.map((table) => ({
-        ...table,
-        status: occupiedTableIds.has(table.id)
-          ? 'occupied'
-          : table.status === 'reserved'
-            ? 'reserved'
-            : 'available',
-      })),
     });
+  },
+
+  refreshTables: async () => {
+    const floorsDto = await api<FloorDto[]>('/api/floors');
+    set({ tables: tablesFromFloors(floorsDto) });
   },
 
   setSelfOrderEnabled: async (enabled) => {
@@ -486,7 +483,7 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
 
   saveTable: async (table) => {
     const existing = get().tables.some((item) => item.id === table.id);
-    const dto = await api<{ id: number; floorId: number; tableNumber: string; seats: number; active: boolean }>(
+    const dto = await api<TableDto>(
       existing ? `/api/tables/${table.id}` : `/api/floors/${table.floorId}/tables`,
       {
         method: existing ? 'PUT' : 'POST',
@@ -502,12 +499,39 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
       floorId: String(dto.floorId),
       label: dto.tableNumber,
       seats: dto.seats,
-      status: dto.active ? 'available' : 'reserved',
+      status: !dto.active ? 'reserved' : dto.occupiedById ? 'occupied' : 'available',
+      occupiedById: dto.occupiedById ? String(dto.occupiedById) : null,
+      occupiedByName: dto.occupiedByName,
     };
     set((state) => ({
       tables: existing
         ? state.tables.map((item) => (item.id === table.id ? saved : item))
         : [...state.tables, saved],
+    }));
+  },
+  claimTable: async (id) => {
+    const dto = await api<TableDto>(`/api/tables/${id}/claim`, { method: 'POST' });
+    set((state) => ({
+      tables: state.tables.map((table) =>
+        table.id === id
+          ? {
+              ...table,
+              status: 'occupied',
+              occupiedById: dto.occupiedById ? String(dto.occupiedById) : null,
+              occupiedByName: dto.occupiedByName,
+            }
+          : table
+      ),
+    }));
+  },
+  releaseTable: async (id) => {
+    await api<TableDto>(`/api/tables/${id}/release`, { method: 'POST' });
+    set((state) => ({
+      tables: state.tables.map((table) =>
+        table.id === id
+          ? { ...table, status: 'available', occupiedById: null, occupiedByName: null }
+          : table
+      ),
     }));
   },
   deleteTable: async (id) => {

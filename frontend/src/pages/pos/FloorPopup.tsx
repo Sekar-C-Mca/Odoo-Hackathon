@@ -4,22 +4,43 @@ import { useCatalogStore } from '../../store/catalogStore';
 import { useCartStore } from '../../store/cartStore';
 import { SectionLabel } from '../../components/ui';
 import { toast } from '../../components/ui/Toast';
+import { useAuthStore } from '../../store/authStore';
 
 export function FloorPopup({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { floors, tables, orders, saveTable } = useCatalogStore();
+  const { floors, tables, orders, claimTable, releaseTable, refreshTables } = useCatalogStore();
   const { setTable, loadOrder, clearCart } = useCartStore();
+  const user = useAuthStore((state) => state.user);
   const [activeFloor, setActiveFloor] = useState(floors[0]?.id ?? '');
 
   if (!open) return null;
 
   const floorTables = tables.filter((t) => t.floorId === activeFloor);
 
-  const select = (id: string, label: string) => {
+  const select = async (id: string, label: string) => {
+    const table = tables.find((item) => item.id === id);
+    if (!table || table.status === 'reserved') return;
+    if (table.occupiedById && table.occupiedById !== user?.id) {
+      toast.error(`Table ${label} is being served by ${table.occupiedByName ?? 'another cashier'}.`);
+      return;
+    }
+    const existingDraft = orders.find(
+      (order) =>
+        order.status === 'draft' &&
+        order.tableId === id &&
+        order.employeeId === user?.id
+    );
+    if (table.status === 'occupied' && !existingDraft) {
+      toast.info(`Table ${label} is still in service. Mark it free before starting another order.`);
+      return;
+    }
+    try {
+      await claimTable(id);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to claim table.');
+      await refreshTables();
+      return;
+    }
     setTable(id, label);
-    saveTable({ ...tables.find((t) => t.id === id)!, status: 'occupied' });
-
-    // Check if there's an existing draft order for this table — resume it instead of clearing
-    const existingDraft = orders.find((o) => o.status === 'draft' && o.tableLabel === label);
     if (existingDraft) {
       const cartItems = existingDraft.items.map((i) => ({
         id: i.productId ?? '',
@@ -42,6 +63,15 @@ export function FloorPopup({ open, onClose }: { open: boolean; onClose: () => vo
       clearCart();
     }
     onClose();
+  };
+
+  const markFree = async (id: string, label: string) => {
+    try {
+      await releaseTable(id);
+      toast.success(`Table ${label} is now available.`);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to free table.');
+    }
   };
 
   return (
@@ -67,24 +97,48 @@ export function FloorPopup({ open, onClose }: { open: boolean; onClose: () => vo
           {floorTables.map((t) => {
             const occupied = t.status === 'occupied';
             const reserved = t.status === 'reserved';
-            const hasDraft = orders.some((o) => o.status === 'draft' && o.tableLabel === t.label);
+            const ownedByCurrentUser = t.occupiedById === user?.id;
+            const occupiedByOther = Boolean(t.occupiedById && !ownedByCurrentUser);
+            const hasDraft = orders.some(
+              (order) =>
+                order.status === 'draft' &&
+                order.tableId === t.id &&
+                order.employeeId === user?.id
+            );
             return (
-              <button
+              <div
                 key={t.id}
-                onClick={() => select(t.id, t.label)}
-                disabled={reserved}
-                className="aspect-[4/3] flex flex-col items-center justify-center border p-4 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="aspect-[4/3] flex flex-col items-center justify-center border p-4 transition-colors"
                 style={{
                   background: occupied ? 'rgba(0,117,74,0.06)' : 'var(--surface-raised)',
                   borderColor: occupied ? 'rgba(0,117,74,0.35)' : 'var(--border)',
                 }}
               >
-                <span className="font-display text-[28px] text-text leading-none">{t.label}</span>
-                <span className="mt-2 text-[14px] tracking-[0.18em] uppercase font-extralight text-text-faint">{t.seats} seats</span>
-                {occupied && <span className="mt-2 w-1.5 h-1.5 bg-gold" />}
-                {hasDraft && <span className="mt-1 text-[12px] tracking-[0.12em] uppercase text-gold">Draft</span>}
-                {reserved && <span className="mt-2 text-[14px] tracking-[0.18em] uppercase text-cancel">Reserved</span>}
-              </button>
+                <button
+                  onClick={() => void select(t.id, t.label)}
+                  disabled={reserved || occupiedByOther}
+                  className="flex w-full flex-1 flex-col items-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="font-display text-[28px] text-text leading-none">{t.label}</span>
+                  <span className="mt-2 text-[14px] tracking-[0.18em] uppercase font-extralight text-text-faint">{t.seats} seats</span>
+                  {occupied && <span className="mt-2 w-1.5 h-1.5 bg-gold" />}
+                  {hasDraft && <span className="mt-1 text-[12px] tracking-[0.12em] uppercase text-gold">Your draft</span>}
+                  {occupiedByOther && (
+                    <span className="mt-1 text-[12px] tracking-[0.12em] uppercase text-text-faint">
+                      {t.occupiedByName}
+                    </span>
+                  )}
+                  {reserved && <span className="mt-2 text-[14px] tracking-[0.18em] uppercase text-cancel">Reserved</span>}
+                </button>
+                {ownedByCurrentUser && !hasDraft && (
+                  <button
+                    onClick={() => void markFree(t.id, t.label)}
+                    className="mt-2 border border-[rgba(0,117,74,0.4)] px-3 py-1.5 text-[13px] uppercase tracking-[0.12em] text-gold"
+                  >
+                    Mark free
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
