@@ -8,17 +8,16 @@ import org.springframework.web.bind.annotation.RestController;
 @SpringBootApplication
 public class CafePosBackendApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(CafePosBackendApplication.class, args);
+  public static void main(String[] args) {
+    SpringApplication.run(CafePosBackendApplication.class, args);
+  }
 
-    }
-    
-    @RestController
-    public class HomeController {
+  @RestController
+  public class HomeController {
 
-        @GetMapping("/")
-        public String home() {
-            return "Cafe POS Backend Running";
-        }
+    @GetMapping("/")
+    public String home() {
+      return "Cafe POS Backend Running";
     }
+  }
 }

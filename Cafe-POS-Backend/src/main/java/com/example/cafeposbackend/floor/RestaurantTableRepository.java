@@ -1,1 +1,8 @@
-package com.example.cafeposbackend.floor; import org.springframework.data.jpa.repository.JpaRepository; import java.util.List; public interface RestaurantTableRepository extends JpaRepository<RestaurantTable,Long>{List<RestaurantTable> findByFloorId(Long floorId);}
+package com.example.cafeposbackend.floor;
+
+import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface RestaurantTableRepository extends JpaRepository<RestaurantTable, Long> {
+  List<RestaurantTable> findByFloorId(Long floorId);
+}
