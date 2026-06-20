@@ -1,25 +1,29 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, QrCode as QrIcon } from 'lucide-react';
+import { ArrowLeft, Check, QrCode as QrIcon, Mail } from 'lucide-react';
 import { Button, Input, SectionLabel } from '../../components/ui';
 import { useCartStore, cartTotals } from '../../store/cartStore';
 import { useCatalogStore } from '../../store/catalogStore';
+import { useAuthStore } from '../../store/authStore';
 import { useKDSStore } from '../../store/kdsStore';
+import { ReceiptEmailModal } from './ReceiptEmailModal';
 import { toast } from '../../components/ui/Toast';
 
 type Method = 'cash' | 'upi' | 'card';
 
 export function PaymentScreen() {
   const navigate = useNavigate();
-  const { items, tableLabel, coupon, clearCart } = useCartStore();
-  const { addOrder } = useCatalogStore();
+  const { items, tableLabel, coupon, customer, clearCart } = useCartStore();
+  const { addOrder, updateOrder, orders } = useCatalogStore();
   const addTicket = useKDSStore((s) => s.addTicket);
+  const user = useAuthStore((s) => s.user);
   const totals = useMemo(() => cartTotals(items, coupon), [items, coupon]);
   const [method, setMethod] = useState<Method>('cash');
   const [cash, setCash] = useState('');
   const [cardRef, setCardRef] = useState('');
   const [done, setDone] = useState(false);
   const [orderNum, setOrderNum] = useState('');
+  const [emailOpen, setEmailOpen] = useState(false);
 
   if (items.length === 0 && !done) {
     return (
@@ -36,23 +40,42 @@ export function PaymentScreen() {
   const finalize = (pm: Method) => {
     const num = `#${String(Math.floor(Math.random() * 9000) + 1000)}`;
     setOrderNum(num);
-    addOrder({
-      id: `o-${Date.now()}`,
-      orderNum: num,
-      tableLabel,
-      status: 'paid',
-      total: totals.total,
-      items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
-      createdAt: new Date().toISOString(),
-      paymentMethod: pm,
-    });
-    addTicket({
-      id: `k-${Date.now()}`,
-      orderNum: num,
-      tableLabel: tableLabel ?? 'Takeaway',
-      items: items.map((i) => ({ id: i.id, name: i.name, qty: i.qty, done: false })),
-    });
-    toast.success(`${num} paid via ${pm}.`);
+
+    // Check if there's already a draft order for this (from "Send to kitchen")
+    // If so, update it to paid status. Otherwise, create a new order.
+    const existingDraft = orders.find(
+      (o) => o.status === 'draft' && o.tableLabel === tableLabel && tableLabel !== null
+    );
+
+    if (existingDraft) {
+      updateOrder(existingDraft.id, {
+        status: 'paid',
+        total: totals.total,
+        paymentMethod: pm,
+        employeeName: user?.name,
+        items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, discount: i.discount })),
+      });
+    } else {
+      addOrder({
+        id: `o-${Date.now()}`,
+        orderNum: num,
+        tableLabel,
+        status: 'paid',
+        total: totals.total,
+        customer: customer?.name,
+        employeeName: user?.name,
+        items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, discount: i.discount })),
+        createdAt: new Date().toISOString(),
+        paymentMethod: pm,
+      });
+      addTicket({
+        id: `k-${Date.now()}`,
+        orderNum: num,
+        tableLabel: tableLabel ?? 'Takeaway',
+        items: items.map((i) => ({ id: i.id, name: i.name, qty: i.qty, done: false })),
+      });
+    }
+    toast.success(`${existingDraft ? existingDraft.orderNum : num} paid via ${pm}.`);
     clearCart();
     setDone(true);
   };
@@ -66,8 +89,17 @@ export function PaymentScreen() {
         <div className="text-[17px] font-light text-text-muted mb-8">Thank you. The kitchen has been notified.</div>
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
           <Button fullWidth size="md" onClick={() => navigate('/pos')}>New order</Button>
+          <Button fullWidth variant="ghost" size="md" onClick={() => setEmailOpen(true)}>
+            <Mail size={14} /> Send receipt
+          </Button>
           <Button fullWidth variant="ghost" size="md" onClick={() => navigate('/pos/history')}>View history</Button>
         </div>
+        <ReceiptEmailModal
+          open={emailOpen}
+          onClose={() => setEmailOpen(false)}
+          orderNum={orderNum}
+          total={totals.total}
+        />
       </div>
     );
   }

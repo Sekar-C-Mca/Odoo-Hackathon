@@ -1,43 +1,69 @@
-import { useState } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Plus, Trash2, GripVertical } from 'lucide-react';
 import { PageHeader } from '../../components/shared/PageHeader';
-import { SectionLabel, Button, Input, Modal } from '../../components/ui';
+import { SectionLabel, Button, Input } from '../../components/ui';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { useCatalogStore } from '../../store/catalogStore';
 import { toast } from '../../components/ui/Toast';
 import { CATEGORY_PALETTE, type Category } from '../../data/seed';
 
 export function CategoriesPage() {
-  const { categories, products, saveCategory, deleteCategory } = useCatalogStore();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [draft, setDraft] = useState<Category>({ id: '', name: '', color: CATEGORY_PALETTE[0] });
-  const [editing, setEditing] = useState(false);
+  const { categories, products, saveCategory, deleteCategory, reorderCategories } = useCatalogStore();
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('');
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
 
-  const openNew = () => {
-    setDraft({
+  const count = (id: string) => products.filter((p) => p.categoryId === id).length;
+
+  const addInline = () => {
+    const newCat: Category = {
       id: `c-${Date.now()}`,
       name: '',
       color: CATEGORY_PALETTE[categories.length % CATEGORY_PALETTE.length],
-    });
-    setEditing(false);
-    setModalOpen(true);
+      sortOrder: categories.length,
+    };
+    saveCategory(newCat);
+    setEditingId(newCat.id);
+    setEditName('');
+    setEditColor(newCat.color);
   };
-  const openEdit = (c: Category) => {
-    setDraft(c);
-    setEditing(true);
-    setModalOpen(true);
-  };
-  const save = () => {
-    if (!draft.name.trim()) {
+
+  const saveInline = (id: string) => {
+    if (!editName.trim()) {
       toast.error('Category name is required.');
       return;
     }
-    saveCategory(draft);
-    toast.success(editing ? 'Category updated.' : 'Category created.');
-    setModalOpen(false);
+    saveCategory({ id, name: editName.trim(), color: editColor, sortOrder: categories.findIndex((c) => c.id === id) });
+    toast.success('Category saved.');
+    setEditingId(null);
   };
-  const count = (id: string) => products.filter((p) => p.categoryId === id).length;
+
+  const startEdit = (c: Category) => {
+    setEditingId(c.id);
+    setEditName(c.name);
+    setEditColor(c.color);
+  };
+
+  const handleDragStart = (idx: number) => {
+    dragItem.current = idx;
+  };
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    dragOverItem.current = idx;
+  };
+  const handleDrop = () => {
+    if (dragItem.current === null || dragOverItem.current === null) return;
+    const items = [...categories];
+    const dragged = items.splice(dragItem.current, 1)[0];
+    items.splice(dragOverItem.current, 0, dragged);
+    reorderCategories(items.map((c, i) => ({ ...c, sortOrder: i })));
+    dragItem.current = null;
+    dragOverItem.current = null;
+    toast.success('Order saved.');
+  };
 
   return (
     <div>
@@ -45,62 +71,89 @@ export function CategoriesPage() {
         title="Categories"
         accentWord="Categories"
         subtitle="Menu groupings"
-        actions={<Button onClick={openNew} size="md"><Plus size={14} /> New category</Button>}
+        actions={<Button onClick={addInline} size="md"><Plus size={14} /> New category</Button>}
       />
       <SectionLabel>{categories.length} categories</SectionLabel>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {categories.map((c) => (
-          <div key={c.id} className="border border-border p-4" style={{ background: 'var(--surface)' }}>
-            <div className="h-10 w-full mb-3" style={{ background: c.color }} />
-            <div className="text-[18px] font-light text-text">{c.name}</div>
-            <div className="text-[15px] tracking-[0.15em] uppercase font-extralight text-text-faint mt-1">
-              {count(c.id)} products · {c.color}
+
+      <div className="border border-border overflow-hidden" style={{ background: 'var(--surface)' }}>
+        {/* Header */}
+        <div className="grid grid-cols-[40px_1fr_100px_80px_60px] text-[14px] tracking-[0.2em] uppercase font-extralight text-text-muted border-b border-border px-4 py-3">
+          <span></span>
+          <span>Name</span>
+          <span>Colour</span>
+          <span>Products</span>
+          <span></span>
+        </div>
+
+        {categories.map((c, idx) => (
+          <div
+            key={c.id}
+            draggable
+            onDragStart={() => handleDragStart(idx)}
+            onDragOver={(e) => handleDragOver(e, idx)}
+            onDrop={handleDrop}
+            className="grid grid-cols-[40px_1fr_100px_80px_60px] items-center px-4 py-3 border-b border-border last:border-0 hover:bg-[rgba(0,117,74,0.02)]"
+          >
+            {/* Drag handle */}
+            <div className="cursor-grab text-text-faint hover:text-text">
+              <GripVertical size={16} />
             </div>
-            <div className="flex items-center gap-1 mt-3">
-              <Button variant="ghost" size="sm" onClick={() => openEdit(c)}><Pencil size={13} /></Button>
-              <Button variant="ghost" size="sm" onClick={() => setConfirmId(c.id)}><Trash2 size={13} /></Button>
+
+            {/* Name */}
+            <div>
+              {editingId === c.id ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveInline(c.id); if (e.key === 'Escape') setEditingId(null); }}
+                    autoFocus
+                    placeholder="Category name"
+                    className="bg-transparent border-b border-gold py-1 text-[17px] font-light text-text outline-none w-full max-w-[200px]"
+                  />
+                  <Button size="sm" onClick={() => saveInline(c.id)}>Save</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>✕</Button>
+                </div>
+              ) : (
+                <button onClick={() => startEdit(c)} className="text-[17px] font-light text-text hover:text-gold text-left">
+                  {c.name || <span className="italic text-text-faint">Unnamed</span>}
+                </button>
+              )}
             </div>
+
+            {/* Colour swatch */}
+            <div>
+              {editingId === c.id ? (
+                <div className="flex items-center gap-1">
+                  {CATEGORY_PALETTE.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setEditColor(color)}
+                      className="w-6 h-6 rounded-full border-2 transition-transform"
+                      style={{
+                        background: color,
+                        borderColor: editColor === color ? 'var(--text)' : 'transparent',
+                        transform: editColor === color ? 'scale(1.2)' : 'scale(1)',
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full" style={{ background: c.color }} />
+              )}
+            </div>
+
+            {/* Product count */}
+            <span className="text-[16px] font-light text-text-muted">{count(c.id)}</span>
+
+            {/* Delete */}
+            <button onClick={() => setConfirmId(c.id)} className="p-2 text-text-muted hover:text-cancel min-h-[40px] min-w-[40px] flex items-center justify-center" aria-label="Delete">
+              <Trash2 size={14} />
+            </button>
           </div>
         ))}
       </div>
-
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editing ? 'Edit category' : 'New category'}
-        footer={
-          <>
-            <Button variant="ghost" size="sm" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={save}>{editing ? 'Save' : 'Create'}</Button>
-          </>
-        }
-      >
-        <div className="space-y-5">
-          <Input label="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Coffee" />
-          <div>
-            <label className="block mb-2 text-[14px] font-semibold text-text-muted">Colour</label>
-            <div className="flex flex-wrap gap-2 mb-4">
-              {CATEGORY_PALETTE.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  aria-label={`Use ${color}`}
-                  onClick={() => setDraft({ ...draft, color })}
-                  className="w-10 h-10 rounded-full border-2 transition-transform"
-                  style={{
-                    background: color,
-                    borderColor: draft.color === color ? 'var(--text)' : 'transparent',
-                  }}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              <input type="color" value={draft.color} onChange={(e) => setDraft({ ...draft, color: e.target.value })} className="w-12 h-10 border border-border cursor-pointer" />
-              <span className="text-[17px] font-light text-text-muted">{draft.color}</span>
-            </div>
-          </div>
-        </div>
-      </Modal>
 
       <ConfirmDialog
         open={confirmId !== null}

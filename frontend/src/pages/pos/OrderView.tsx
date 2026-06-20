@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Minus, Plus, Trash2, X, ShoppingCart, Send, UserPlus, Tag } from 'lucide-react';
-import { SectionLabel, Button, Badge } from '../../components/ui';
+import { Minus, Plus, Trash2, X, ShoppingCart, Send, UserPlus, Tag, Percent } from 'lucide-react';
+import { SectionLabel, Button, Badge, Input, Select } from '../../components/ui';
 import { FloorPopup } from './FloorPopup';
 import { useCatalogStore, categoryColor } from '../../store/catalogStore';
 import { useCartStore, cartTotals } from '../../store/cartStore';
 import { useKDSStore } from '../../store/kdsStore';
+import { useAuthStore } from '../../store/authStore';
 import { toast } from '../../components/ui/Toast';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 
 export function OrderView() {
   const navigate = useNavigate();
   const { products, categories, coupons } = useCatalogStore();
-  const { items, tableId, tableLabel, customer, coupon, addItem, updateQty, removeItem, setTable, applyCoupon, clearCart } = useCartStore();
+  const { items, tableId, tableLabel, customer, coupon, addItem, updateQty, removeItem, setTable, applyCoupon, applyItemDiscount, clearCart } = useCartStore();
   const addTicket = useKDSStore((s) => s.addTicket);
   const addOrder = useCatalogStore((s) => s.addOrder);
+  const user = useAuthStore((s) => s.user);
 
   const isMobile = useMediaQuery('(max-width: 899px)');
   const [floorOpen, setFloorOpen] = useState(!tableId);
@@ -22,10 +24,35 @@ export function OrderView() {
   const [cartOpen, setCartOpen] = useState(false);
   const [couponOpen, setCouponOpen] = useState(false);
   const [couponCode, setCouponCode] = useState('');
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [discItemId, setDiscItemId] = useState('');
+  const [discType, setDiscType] = useState<'percent' | 'flat'>('percent');
+  const [discValue, setDiscValue] = useState('');
 
   useEffect(() => {
     if (!tableId) setFloorOpen(true);
   }, [tableId]);
+
+  // Auto-surface automated promotions
+  useEffect(() => {
+    const autoPromos = coupons.filter((c) => c.active && c.promoType !== 'manual');
+    const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+    for (const promo of autoPromos) {
+      if (promo.promoType === 'auto_order' && promo.orderThreshold && subtotal >= promo.orderThreshold && !coupon) {
+        applyCoupon({ code: promo.code, type: promo.type, value: promo.value });
+        toast.success(`Auto promotion "${promo.code}" applied!`);
+        break;
+      }
+      if (promo.promoType === 'auto_product' && promo.productId && promo.minQty) {
+        const cartItem = items.find((i) => i.id === promo.productId);
+        if (cartItem && cartItem.qty >= promo.minQty && !coupon) {
+          applyCoupon({ code: promo.code, type: promo.type, value: promo.value });
+          toast.success(`Auto promotion "${promo.code}" applied!`);
+          break;
+        }
+      }
+    }
+  }, [items, coupons, coupon, applyCoupon]);
 
   const filtered = useMemo(
     () => products.filter((p) => p.available && (activeCat === 'all' || p.categoryId === activeCat)),
@@ -49,16 +76,16 @@ export function OrderView() {
       id: `o-${Date.now()}`,
       orderNum,
       tableLabel,
-      status: 'paid',
+      status: 'draft',
       total: totals.total,
       customer: customer?.name,
-      items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+      employeeName: user?.name,
+      items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, discount: i.discount })),
       createdAt: new Date().toISOString(),
     });
-    toast.success(`${orderNum} sent to kitchen.`);
+    toast.success(`${orderNum} sent to kitchen (draft).`);
     clearCart();
     setCartOpen(false);
-    navigate('/pos/history');
   };
 
   const applyCouponCode = () => {
@@ -67,10 +94,23 @@ export function OrderView() {
       toast.error('Invalid or inactive coupon.');
       return;
     }
+    if (c.minOrder > 0 && totals.subtotal < c.minOrder) {
+      toast.error(`Minimum order ₹${c.minOrder} required for this coupon.`);
+      return;
+    }
     applyCoupon({ code: c.code, type: c.type, value: c.value });
     toast.success(`Coupon ${c.code} applied.`);
     setCouponOpen(false);
     setCouponCode('');
+  };
+
+  const applyDiscount = () => {
+    if (!discItemId || !discValue) return;
+    applyItemDiscount(discItemId, discType, Number(discValue));
+    toast.success('Product discount applied.');
+    setDiscountOpen(false);
+    setDiscItemId('');
+    setDiscValue('');
   };
 
   const CartContents = () => (
@@ -86,18 +126,26 @@ export function OrderView() {
       ) : (
         <div className="flex flex-col">
           {items.map((i) => (
-            <div key={i.id} className="flex items-center justify-between py-3 border-b border-border gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="text-[17px] font-light text-text truncate">{i.name}</div>
-                <div className="text-[15px] font-extralight text-text-faint">₹{i.price} each</div>
+            <div key={i.id} className="py-3 border-b border-border">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[17px] font-light text-text truncate">{i.name}</div>
+                  <div className="text-[15px] font-extralight text-text-faint">₹{i.price} each</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => updateQty(i.id, i.qty - 1)} className="w-9 h-9 flex items-center justify-center border border-border text-text-muted hover:border-gold hover:text-gold transition-colors" aria-label="Decrease"><Minus size={13} /></button>
+                  <span className="w-7 text-center text-[17px] font-light text-text">{i.qty}</span>
+                  <button onClick={() => updateQty(i.id, i.qty + 1)} className="w-9 h-9 flex items-center justify-center border border-border text-text-muted hover:border-gold hover:text-gold transition-colors" aria-label="Increase"><Plus size={13} /></button>
+                </div>
+                <div className="w-16 text-right font-display text-[18px] text-text">₹{i.price * i.qty}</div>
+                <button onClick={() => removeItem(i.id)} className="w-9 h-9 flex items-center justify-center text-text-faint hover:text-cancel" aria-label="Remove"><Trash2 size={13} /></button>
               </div>
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => updateQty(i.id, i.qty - 1)} className="w-9 h-9 flex items-center justify-center border border-border text-text-muted hover:border-gold hover:text-gold transition-colors" aria-label="Decrease"><Minus size={13} /></button>
-                <span className="w-7 text-center text-[17px] font-light text-text">{i.qty}</span>
-                <button onClick={() => updateQty(i.id, i.qty + 1)} className="w-9 h-9 flex items-center justify-center border border-border text-text-muted hover:border-gold hover:text-gold transition-colors" aria-label="Increase"><Plus size={13} /></button>
-              </div>
-              <div className="w-16 text-right font-display text-[18px] text-text">₹{i.price * i.qty}</div>
-              <button onClick={() => removeItem(i.id)} className="w-9 h-9 flex items-center justify-center text-text-faint hover:text-cancel" aria-label="Remove"><Trash2 size={13} /></button>
+              {/* Product-level discount display */}
+              {i.discount && i.discount > 0 && (
+                <div className="mt-1 text-[14px] font-light text-cancel pl-1">
+                  Discount: −₹{i.discount} ({i.discountType === 'percent' ? `${i.discountValue}%` : `₹${i.discountValue}`})
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -106,10 +154,13 @@ export function OrderView() {
         <div className="mt-auto pt-4 border-t border-[rgba(0,117,74,0.2)]">
           <div className="space-y-1.5">
             <div className="flex justify-between"><span className="text-[14px] tracking-[0.12em] uppercase font-extralight text-text-muted">Subtotal</span><span className="font-display text-[17px] text-text-muted">₹{totals.subtotal}</span></div>
-            {totals.discount > 0 && (
-              <div className="flex justify-between"><span className="text-[14px] tracking-[0.12em] uppercase font-extralight text-text-muted">Discount</span><span className="font-display text-[17px] text-cancel">−₹{totals.discount}</span></div>
+            {totals.itemDiscounts > 0 && (
+              <div className="flex justify-between"><span className="text-[14px] tracking-[0.12em] uppercase font-extralight text-text-muted">Item discounts</span><span className="font-display text-[17px] text-cancel">−₹{totals.itemDiscounts}</span></div>
             )}
             <div className="flex justify-between"><span className="text-[14px] tracking-[0.12em] uppercase font-extralight text-text-muted">GST 5%</span><span className="font-display text-[17px] text-text-muted">₹{totals.gst}</span></div>
+            {totals.orderDiscount > 0 && (
+              <div className="flex justify-between"><span className="text-[14px] tracking-[0.12em] uppercase font-extralight text-text-muted">Discount ({coupon?.code})</span><span className="font-display text-[17px] text-cancel">−₹{totals.orderDiscount}</span></div>
+            )}
           </div>
           <div className="flex justify-between items-baseline mt-3 pt-3 border-t border-border">
             <span className="text-[14px] tracking-[0.22em] uppercase font-extralight text-gold">Total</span>
@@ -117,8 +168,27 @@ export function OrderView() {
           </div>
           <div className="flex flex-wrap gap-2 mt-3">
             <Button variant="ghost" size="sm" onClick={() => navigate('/pos/customers')}><UserPlus size={13} /> {customer ? 'Change' : 'Customer'}</Button>
+            <Button variant="ghost" size="sm" onClick={() => setDiscountOpen(!discountOpen)}><Percent size={13} /> Discount</Button>
             <Button variant="ghost" size="sm" onClick={() => setCouponOpen(!couponOpen)}><Tag size={13} /> {coupon ? coupon.code : 'Coupon'}</Button>
           </div>
+          {/* Discount popup */}
+          {discountOpen && (
+            <div className="mt-3 p-3 border border-border space-y-3">
+              <div className="text-[14px] tracking-[0.18em] uppercase font-extralight text-text-muted">Product-level discount</div>
+              <Select label="Item" value={discItemId} onChange={(e) => setDiscItemId(e.target.value)}>
+                <option value="">Select item</option>
+                {items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+              </Select>
+              <div className="grid grid-cols-2 gap-2">
+                <Select label="Type" value={discType} onChange={(e) => setDiscType(e.target.value as 'percent' | 'flat')}>
+                  <option value="percent">%</option>
+                  <option value="flat">₹</option>
+                </Select>
+                <Input label="Value" type="number" value={discValue} onChange={(e) => setDiscValue(e.target.value)} placeholder="10" />
+              </div>
+              <Button size="sm" onClick={applyDiscount}>Apply</Button>
+            </div>
+          )}
           {couponOpen && (
             <div className="mt-3 flex gap-2">
               <input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="WELCOME10" className="flex-1 bg-transparent border-b border-border py-2 text-[17px] font-light text-text outline-none focus:border-gold placeholder:text-text-faint" />
@@ -175,7 +245,11 @@ export function OrderView() {
               className="border border-border p-3.5 text-left transition-colors hover:border-[rgba(0,117,74,0.35)]"
               style={{ background: 'var(--surface-raised)' }}
             >
-              <span className="block w-5 h-0.5 mb-2.5 opacity-60" style={{ background: categoryColor(categories, p.categoryId) }} />
+              <div className="flex items-center justify-between mb-2">
+                <span className="block w-5 h-0.5 opacity-60" style={{ background: categoryColor(categories, p.categoryId) }} />
+                {/* Availability dot indicator */}
+                <span className={`w-2.5 h-2.5 rounded-full ${p.available ? 'bg-paid' : 'bg-cancel'}`} title={p.available ? 'In stock' : 'Out of stock'} />
+              </div>
               <span className="block text-[16px] font-light text-text leading-snug mb-1.5">{p.name}</span>
               <span className="block font-display text-[19px] text-text">₹{p.price}</span>
             </button>

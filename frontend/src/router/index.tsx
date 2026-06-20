@@ -18,6 +18,7 @@ import { PaymentScreen } from '../pages/pos/PaymentScreen';
 import { OrdersListPage } from '../pages/pos/OrdersListPage';
 import { CustomerPage } from '../pages/pos/CustomerPage';
 import { TablesView } from '../pages/pos/TablesView';
+import { SessionLanding } from '../pages/pos/SessionLanding';
 import { KDSPage } from '../pages/kds/KDSPage';
 import { CustomerDisplayPage } from '../pages/customer-display/CustomerDisplayPage';
 import { SelfOrderPage as SelfOrderPortal } from '../pages/self-order/SelfOrderPage';
@@ -47,6 +48,8 @@ export function AppRouter() {
         <Route path="self-order" element={<SelfOrderPage />} />
         <Route path="reports" element={<ReportsPage />} />
       </Route>
+
+      <Route path="/pos/session" element={<ProtectedRoute><SessionLanding /></ProtectedRoute>} />
 
       <Route path="/pos" element={<ProtectedRoute><POSLayout /></ProtectedRoute>}>
         <Route index element={<OrderView />} />
