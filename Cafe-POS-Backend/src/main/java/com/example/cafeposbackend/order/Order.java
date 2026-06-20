@@ -55,4 +55,7 @@ public class Order extends BaseEntity {
 
   @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
   private BigDecimal totalAmount = BigDecimal.ZERO;
+
+  @Column(name = "sent_to_kitchen", nullable = false)
+  private boolean sentToKitchen = false;
 }
