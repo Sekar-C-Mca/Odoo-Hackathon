@@ -90,6 +90,7 @@ public class OrderServiceImpl implements OrderService {
   @Override
   @Transactional
   public OrderResponse createOrUpdate(OrderRequest request, Long sessionId, Long tableId) {
+    var user = currentUser.require();
     PosSession session =
         sessionRepository
             .findById(sessionId)
@@ -104,14 +105,18 @@ public class OrderServiceImpl implements OrderService {
     if (order.getId() != null && order.getStatus() != OrderStatus.DRAFT) {
       throw new BusinessRuleException("Only draft orders can be edited");
     }
+    if (order.getId() != null && !order.getEmployee().getId().equals(user.getId())) {
+      throw new BusinessRuleException("Only the serving cashier can edit this order");
+    }
+    RestaurantTable table = tableId == null ? null : claimTable(tableId, user.getId());
     order.setOrderNumber(
         order.getOrderNumber() == null
             ? "ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase()
             : order.getOrderNumber());
     order.setSession(session);
-    order.setEmployee(currentUser.require());
+    order.setEmployee(user);
     order.setStatus(OrderStatus.DRAFT);
-    order.setTable(tableId == null ? null : findTable(tableId));
+    order.setTable(table);
     order.setCustomer(request.customerId() == null ? null : findCustomer(request.customerId()));
     order = orderRepository.save(order);
 
@@ -353,6 +358,26 @@ public class OrderServiceImpl implements OrderService {
         .findById(id)
         .filter(RestaurantTable::isActive)
         .orElseThrow(() -> new ResourceNotFoundException("Active table", id));
+  }
+
+  private RestaurantTable claimTable(Long id, Long userId) {
+    RestaurantTable table =
+        tableRepository
+            .findByIdForUpdate(id)
+            .filter(RestaurantTable::isActive)
+            .orElseThrow(() -> new ResourceNotFoundException("Active table", id));
+    if (table.getOccupiedBy() != null && !table.getOccupiedBy().getId().equals(userId)) {
+      throw new BusinessRuleException(
+          "Table "
+              + table.getTableNumber()
+              + " is currently served by "
+              + table.getOccupiedBy().getName());
+    }
+    if (table.getOccupiedBy() == null) {
+      table.setOccupiedBy(currentUser.require());
+      tableRepository.save(table);
+    }
+    return table;
   }
 
   private Customer findCustomer(Long id) {

@@ -63,4 +63,14 @@ public class FloorController {
   ApiResponse<TableStatusResponse> status(@PathVariable Long id) {
     return ApiResponse.success(service.getTableStatus(id));
   }
+
+  @PostMapping("/api/tables/{id}/claim")
+  ApiResponse<TableResponse> claim(@PathVariable Long id) {
+    return ApiResponse.success(service.claimTable(id));
+  }
+
+  @PostMapping("/api/tables/{id}/release")
+  ApiResponse<TableResponse> release(@PathVariable Long id) {
+    return ApiResponse.success(service.releaseTable(id));
+  }
 }

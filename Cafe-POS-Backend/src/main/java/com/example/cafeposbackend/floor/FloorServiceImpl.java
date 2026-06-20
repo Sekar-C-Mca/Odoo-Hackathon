@@ -3,6 +3,7 @@ package com.example.cafeposbackend.floor;
 import com.example.cafeposbackend.common.enums.OrderStatus;
 import com.example.cafeposbackend.common.exception.BusinessRuleException;
 import com.example.cafeposbackend.common.exception.ResourceNotFoundException;
+import com.example.cafeposbackend.common.util.CurrentUser;
 import com.example.cafeposbackend.floor.FloorDtos.*;
 import com.example.cafeposbackend.order.Order;
 import com.example.cafeposbackend.order.OrderRepository;
@@ -16,14 +17,17 @@ public class FloorServiceImpl implements FloorService {
   private final FloorRepository floorRepository;
   private final RestaurantTableRepository tableRepository;
   private final OrderRepository orderRepository;
+  private final CurrentUser currentUser;
 
   public FloorServiceImpl(
       FloorRepository floorRepository,
       RestaurantTableRepository tableRepository,
-      OrderRepository orderRepository) {
+      OrderRepository orderRepository,
+      CurrentUser currentUser) {
     this.floorRepository = floorRepository;
     this.tableRepository = tableRepository;
     this.orderRepository = orderRepository;
+    this.currentUser = currentUser;
   }
 
   @Override
@@ -83,14 +87,66 @@ public class FloorServiceImpl implements FloorService {
 
   @Override
   public TableStatusResponse getTableStatus(Long id) {
-    findTable(id);
+    RestaurantTable table = findTable(id);
     Order active =
         orderRepository.findAll().stream()
             .filter(order -> order.getTable() != null && order.getTable().getId().equals(id))
             .filter(order -> order.getStatus() == OrderStatus.DRAFT)
             .findFirst()
             .orElse(null);
-    return new TableStatusResponse(id, active != null, active == null ? null : active.getId());
+    return new TableStatusResponse(
+        id,
+        table.getOccupiedBy() != null,
+        table.getOccupiedBy() == null ? null : table.getOccupiedBy().getId(),
+        table.getOccupiedBy() == null ? null : table.getOccupiedBy().getName(),
+        active == null ? null : active.getId());
+  }
+
+  @Override
+  public TableResponse claimTable(Long id) {
+    RestaurantTable table =
+        tableRepository
+            .findByIdForUpdate(id)
+            .filter(RestaurantTable::isActive)
+            .orElseThrow(() -> new ResourceNotFoundException("Active table", id));
+    var user = currentUser.require();
+    if (table.getOccupiedBy() != null && !table.getOccupiedBy().getId().equals(user.getId())) {
+      throw new BusinessRuleException(
+          "Table "
+              + table.getTableNumber()
+              + " is currently served by "
+              + table.getOccupiedBy().getName());
+    }
+    table.setOccupiedBy(user);
+    return map(tableRepository.save(table));
+  }
+
+  @Override
+  public TableResponse releaseTable(Long id) {
+    RestaurantTable table =
+        tableRepository
+            .findByIdForUpdate(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Table", id));
+    var user = currentUser.require();
+    if (table.getOccupiedBy() == null) {
+      return map(table);
+    }
+    if (!table.getOccupiedBy().getId().equals(user.getId())) {
+      throw new BusinessRuleException(
+          "Only " + table.getOccupiedBy().getName() + " can mark this table free");
+    }
+    boolean hasDraft =
+        orderRepository.findAll().stream()
+            .anyMatch(
+                order ->
+                    order.getTable() != null
+                        && order.getTable().getId().equals(id)
+                        && order.getStatus() == OrderStatus.DRAFT);
+    if (hasDraft) {
+      throw new BusinessRuleException("Complete or cancel the draft order before freeing the table");
+    }
+    table.setOccupiedBy(null);
+    return map(tableRepository.save(table));
   }
 
   private void apply(RestaurantTable table, TableRequest request) {
@@ -121,6 +177,8 @@ public class FloorServiceImpl implements FloorService {
         table.getFloor().getId(),
         table.getTableNumber(),
         table.getSeats(),
-        table.isActive());
+        table.isActive(),
+        table.getOccupiedBy() == null ? null : table.getOccupiedBy().getId(),
+        table.getOccupiedBy() == null ? null : table.getOccupiedBy().getName());
   }
 }

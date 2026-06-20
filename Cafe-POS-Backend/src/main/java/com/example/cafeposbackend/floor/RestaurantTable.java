@@ -1,6 +1,7 @@
 package com.example.cafeposbackend.floor;
 
 import com.example.cafeposbackend.common.BaseEntity;
+import com.example.cafeposbackend.identity.AdminUser;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -22,4 +23,8 @@ public class RestaurantTable extends BaseEntity {
 
   @Column(nullable = false)
   private boolean active = true;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "occupied_by_id")
+  private AdminUser occupiedBy;
 }

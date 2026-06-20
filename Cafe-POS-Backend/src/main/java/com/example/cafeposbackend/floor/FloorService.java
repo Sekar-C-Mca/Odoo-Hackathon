@@ -21,4 +21,8 @@ public interface FloorService {
   void deleteTable(Long id);
 
   TableStatusResponse getTableStatus(Long id);
+
+  TableResponse claimTable(Long id);
+
+  TableResponse releaseTable(Long id);
 }

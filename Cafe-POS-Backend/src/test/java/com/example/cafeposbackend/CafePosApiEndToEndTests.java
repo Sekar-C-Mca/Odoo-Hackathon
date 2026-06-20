@@ -80,6 +80,18 @@ class CafePosApiEndToEndTests {
                 post("/api/customers"),
                 employee.accessToken(),
                 "{\"name\":\"Guest\",\"email\":\"guest@example.com\",\"phone\":\"9999999999\"}"));
+    mockMvc
+        .perform(
+            post("/api/tables/" + tableId + "/claim")
+                .header("Authorization", bearer(employee.accessToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.occupiedById").value(employee.userId()));
+    mockMvc
+        .perform(
+            post("/api/tables/" + tableId + "/claim")
+                .header("Authorization", bearer(admin.accessToken())))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(jsonPath("$.error.code").value("BUSINESS_RULE"));
 
     json(
         post("/api/promotions"),
@@ -152,6 +164,12 @@ class CafePosApiEndToEndTests {
         .perform(put("/api/kds/tickets/" + orderId + "/advance"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.stage").value("PREPARING"));
+    mockMvc
+        .perform(
+            post("/api/tables/" + tableId + "/release")
+                .header("Authorization", bearer(employee.accessToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.occupiedById").doesNotExist());
 
     mockMvc
         .perform(

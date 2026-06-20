@@ -14,9 +14,20 @@ public final class FloorDtos {
       @NotBlank String tableNumber, @NotNull @Min(1) Integer seats, Boolean active) {}
 
   public record TableResponse(
-      Long id, Long floorId, String tableNumber, Integer seats, boolean active) {}
+      Long id,
+      Long floorId,
+      String tableNumber,
+      Integer seats,
+      boolean active,
+      Long occupiedById,
+      String occupiedByName) {}
 
   public record FloorResponse(Long id, String name, List<TableResponse> tables) {}
 
-  public record TableStatusResponse(Long tableId, boolean occupied, Long activeOrderId) {}
+  public record TableStatusResponse(
+      Long tableId,
+      boolean occupied,
+      Long occupiedById,
+      String occupiedByName,
+      Long activeOrderId) {}
 }
