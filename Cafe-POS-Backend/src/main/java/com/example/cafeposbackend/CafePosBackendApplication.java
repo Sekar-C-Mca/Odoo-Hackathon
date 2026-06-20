@@ -12,6 +12,7 @@ public class CafePosBackendApplication {
         SpringApplication.run(CafePosBackendApplication.class, args);
 
     }
+    
     @RestController
     public class HomeController {
 
