@@ -4,14 +4,16 @@ import { AuthShell, AuthLink } from './AuthShell';
 import { Button, Input } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
 import { useCatalogStore } from '../../store/catalogStore';
+import { useSessionStore } from '../../store/sessionStore';
 import { toast } from '../../components/ui/Toast';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
   const employees = useCatalogStore((s) => s.employees);
+  const { isOpen } = useSessionStore();
   const [email, setEmail] = useState('amara@cafeetoile.test');
-  const [pin, setPin] = useState('1111');
+  const [password, setPassword] = useState('1111');
   const [error, setError] = useState('');
 
   const submit = (e: React.FormEvent) => {
@@ -19,8 +21,9 @@ export function LoginPage() {
     const emp = employees.find(
       (x) =>
         x.email.toLowerCase() === email.trim().toLowerCase() &&
-        x.pin === pin &&
-        x.active
+        x.pin === password &&
+        x.active &&
+        !x.archived
     );
     if (!emp) {
       setError('Invalid credentials or inactive employee.');
@@ -31,7 +34,12 @@ export function LoginPage() {
       `token-${emp.id}-${Date.now()}`
     );
     toast.success(`Welcome back, ${emp.name.split(' ')[0]}.`);
-    navigate(emp.role === 'ADMIN' ? '/admin/dashboard' : '/pos');
+    if (emp.role === 'ADMIN') {
+      navigate('/admin/dashboard');
+    } else {
+      // Employee: go directly to POS if session is open, otherwise session landing
+      navigate(isOpen ? '/pos' : '/pos/session');
+    }
   };
 
   return (
@@ -44,7 +52,7 @@ export function LoginPage() {
           Café Étoile staff access
         </p>
         <Input
-          label="Email"
+          label="Email / Username"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -53,10 +61,10 @@ export function LoginPage() {
         />
         <div className="mt-5">
           <Input
-            label="PIN"
+            label="Password"
             type="password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             placeholder="••••"
             autoComplete="current-password"
           />
@@ -66,10 +74,10 @@ export function LoginPage() {
         )}
         <div className="mt-8">
           <Button type="submit" fullWidth size="lg">
-            Enter terminal
+            Login
           </Button>
         </div>
-        <AuthLink to="/signup" label="Create account" prefix="New here?" />
+        <AuthLink to="/signup" label="Sign Up here" prefix="New here?" />
         <div className="mt-8 p-4 border border-border text-[15px] font-light text-text-muted leading-relaxed">
           <span className="tracking-[0.18em] uppercase text-gold">Demo logins</span>
           <br />

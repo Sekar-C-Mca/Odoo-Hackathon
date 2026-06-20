@@ -12,13 +12,13 @@ export function SignupPage() {
   const saveEmployee = useCatalogStore((s) => s.saveEmployee);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.includes('@') || pin.length < 4) {
-      setError('Enter a name, valid email, and a 4+ digit PIN.');
+    if (!name.trim() || !email.includes('@') || password.length < 4) {
+      setError('Enter a name, valid email, and a 4+ character password.');
       return;
     }
     const id = `e-${Date.now()}`;
@@ -27,8 +27,9 @@ export function SignupPage() {
       name: name.trim(),
       email: email.trim(),
       role: 'ADMIN',
-      pin,
+      pin: password,
       active: true,
+      archived: false,
     });
     login({ id, name: name.trim(), email: email.trim(), role: 'ADMIN' }, `token-${id}`);
     toast.success('Account created.');
@@ -45,7 +46,7 @@ export function SignupPage() {
           Register as an owner / manager
         </p>
         <Input
-          label="Full name"
+          label="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Amara Singh"
@@ -53,7 +54,7 @@ export function SignupPage() {
         />
         <div className="mt-5">
           <Input
-            label="Email"
+            label="Email / Username"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -63,10 +64,10 @@ export function SignupPage() {
         </div>
         <div className="mt-5">
           <Input
-            label="Choose a 4-digit PIN"
+            label="Password"
             type="password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             placeholder="••••"
             autoComplete="new-password"
           />
@@ -76,10 +77,10 @@ export function SignupPage() {
         )}
         <div className="mt-8">
           <Button type="submit" fullWidth size="lg">
-            Create account
+            Sign Up
           </Button>
         </div>
-        <AuthLink to="/login" label="Sign in" prefix="Already have an account?" />
+        <AuthLink to="/login" label="Login" prefix="Already have an account?" />
       </form>
     </AuthShell>
   );

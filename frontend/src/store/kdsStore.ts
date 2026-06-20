@@ -7,6 +7,7 @@ export interface KDSItem {
   name: string;
   qty: number;
   done: boolean;
+  categoryId?: string;
 }
 
 export interface KDSTicket {
@@ -24,9 +25,10 @@ interface KDSState {
   advanceStage: (id: string) => void;
   markItemDone: (ticketId: string, itemId: string) => void;
   reset: () => void;
+  getTicketByOrder: (orderNum: string) => KDSTicket | undefined;
 }
 
-export const useKDSStore = create<KDSState>((set) => ({
+export const useKDSStore = create<KDSState>((set, get) => ({
   tickets: [],
   addTicket: (t) =>
     set((s) => ({
@@ -44,7 +46,7 @@ export const useKDSStore = create<KDSState>((set) => ({
             ? 'preparing'
             : t.stage === 'preparing'
             ? 'completed'
-            : 'to_cook';
+            : 'completed';
         return { ...t, stage: next };
       }),
     })),
@@ -62,4 +64,5 @@ export const useKDSStore = create<KDSState>((set) => ({
       ),
     })),
   reset: () => set({ tickets: [] }),
+  getTicketByOrder: (orderNum) => get().tickets.find((t) => t.orderNum === orderNum),
 }));

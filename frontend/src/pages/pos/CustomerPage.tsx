@@ -1,27 +1,36 @@
 import { useMemo, useState } from 'react';
-import { Search, UserPlus } from 'lucide-react';
+import { Search, UserPlus, Pencil, Trash2, X } from 'lucide-react';
 import { PageHeader } from '../../components/shared/PageHeader';
-import { SectionLabel, Input, Button, Badge } from '../../components/ui';
+import { SectionLabel, Input, Button, Badge, Modal } from '../../components/ui';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { useCatalogStore } from '../../store/catalogStore';
 import { useCartStore } from '../../store/cartStore';
 import { useDebounce } from '../../hooks/useDebounce';
 import { toast } from '../../components/ui/Toast';
+import type { Customer } from '../../data/seed';
 
 export function CustomerPage() {
-  const { customers, saveCustomer } = useCatalogStore();
+  const { customers, saveCustomer, deleteCustomer } = useCatalogStore();
   const { setCustomer, customer } = useCartStore();
   const [query, setQuery] = useState('');
   const debounced = useDebounce(query);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [editTarget, setEditTarget] = useState<Customer | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const filtered = useMemo(
     () =>
       customers.filter(
         (c) =>
           c.name.toLowerCase().includes(debounced.toLowerCase()) ||
-          c.phone.includes(debounced)
+          c.phone.includes(debounced) ||
+          (c.email ?? '').toLowerCase().includes(debounced.toLowerCase())
       ),
     [customers, debounced]
   );
@@ -37,11 +46,34 @@ export function CustomerPage() {
       return;
     }
     const id = `cu-${Date.now()}`;
-    saveCustomer({ id, name: name.trim(), phone: phone.trim(), visits: 0, totalSpend: 0 });
+    saveCustomer({ id, name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, visits: 0, totalSpend: 0 });
     select(id, name.trim());
     setName('');
     setPhone('');
+    setEmail('');
     setAdding(false);
+  };
+
+  const openEdit = (c: Customer) => {
+    setEditTarget(c);
+    setEditName(c.name);
+    setEditPhone(c.phone);
+    setEditEmail(c.email ?? '');
+  };
+
+  const saveEdit = () => {
+    if (!editTarget || !editName.trim() || !editPhone.trim()) {
+      toast.error('Name and phone are required.');
+      return;
+    }
+    saveCustomer({
+      ...editTarget,
+      name: editName.trim(),
+      phone: editPhone.trim(),
+      email: editEmail.trim() || undefined,
+    });
+    toast.success('Customer updated.');
+    setEditTarget(null);
   };
 
   return (
@@ -51,7 +83,7 @@ export function CustomerPage() {
         <div className="p-5" style={{ background: 'var(--surface)' }}>
           <div className="flex gap-3 mb-4">
             <div className="relative flex-1">
-              <Input label="Search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name or phone" />
+              <Input label="Search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name, phone or email" />
               <Search size={14} className="absolute right-0 bottom-3 text-text-faint" />
             </div>
             <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)} className="self-end"><UserPlus size={13} /> New</Button>
@@ -65,13 +97,26 @@ export function CustomerPage() {
           )}
           <div className="flex flex-col">
             {filtered.map((c) => (
-              <button key={c.id} onClick={() => select(c.id, c.name)} className="border-b border-border py-3 text-left hover:bg-[rgba(0,117,74,0.04)] transition-colors flex items-center justify-between">
-                <div>
+              <div key={c.id} className="border-b border-border py-3 flex items-center justify-between gap-2">
+                <button onClick={() => select(c.id, c.name)} className="flex-1 text-left hover:bg-[rgba(0,117,74,0.04)] transition-colors">
                   <div className="text-[18px] font-light text-text">{c.name}</div>
-                  <div className="text-[16px] font-extralight text-text-faint">{c.phone} · {c.visits} visits</div>
+                  <div className="text-[16px] font-extralight text-text-faint">
+                    {c.phone}
+                    {c.email && ` · ${c.email}`}
+                    {` · ${c.visits} visits`}
+                  </div>
+                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Badge variant="stone">₹{c.totalSpend.toLocaleString('en-IN')}</Badge>
+                  {/* Kebab menu → Edit / Delete */}
+                  <button onClick={() => openEdit(c)} className="p-2 text-text-muted hover:text-gold min-h-[40px] min-w-[40px] flex items-center justify-center" aria-label="Edit" title="Edit">
+                    <Pencil size={13} />
+                  </button>
+                  <button onClick={() => setConfirmDeleteId(c.id)} className="p-2 text-text-muted hover:text-cancel min-h-[40px] min-w-[40px] flex items-center justify-center" aria-label="Delete" title="Delete">
+                    <Trash2 size={13} />
+                  </button>
                 </div>
-                <Badge variant="stone">₹{c.totalSpend.toLocaleString('en-IN')}</Badge>
-              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -80,9 +125,13 @@ export function CustomerPage() {
             <div>
               <SectionLabel>New customer</SectionLabel>
               <div className="space-y-5">
-                <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priya Nair" />
+                <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priya Nair" />
+                <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="priya@example.com" />
                 <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." />
-                <Button size="md" onClick={addNew}>Create & attach</Button>
+                <div className="flex gap-2">
+                  <Button size="md" onClick={addNew}>Create & attach</Button>
+                  <Button variant="ghost" size="md" onClick={() => setAdding(false)}>Discard</Button>
+                </div>
               </div>
             </div>
           ) : (
@@ -94,6 +143,41 @@ export function CustomerPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Customer Modal */}
+      <Modal
+        open={editTarget !== null}
+        onClose={() => setEditTarget(null)}
+        title="Edit customer"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setEditTarget(null)}>Discard</Button>
+            <Button size="sm" onClick={saveEdit}>Save</Button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <Input label="Name" value={editName} onChange={(e) => setEditName(e.target.value)} />
+          <Input label="Email" type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="customer@example.com" />
+          <Input label="Phone" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        onConfirm={() => {
+          if (confirmDeleteId) {
+            deleteCustomer(confirmDeleteId);
+            toast.info('Customer deleted.');
+          }
+        }}
+        title="Delete customer"
+        message="This will permanently remove this customer record."
+        confirmLabel="Delete"
+        danger
+      />
     </div>
   );
 }

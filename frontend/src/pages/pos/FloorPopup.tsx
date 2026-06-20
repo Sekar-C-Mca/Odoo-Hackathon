@@ -3,10 +3,11 @@ import { X } from 'lucide-react';
 import { useCatalogStore } from '../../store/catalogStore';
 import { useCartStore } from '../../store/cartStore';
 import { SectionLabel } from '../../components/ui';
+import { toast } from '../../components/ui/Toast';
 
 export function FloorPopup({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { floors, tables, saveTable } = useCatalogStore();
-  const { setTable, clearCart } = useCartStore();
+  const { floors, tables, orders, saveTable } = useCatalogStore();
+  const { setTable, loadOrder, clearCart } = useCartStore();
   const [activeFloor, setActiveFloor] = useState(floors[0]?.id ?? '');
 
   if (!open) return null;
@@ -16,7 +17,21 @@ export function FloorPopup({ open, onClose }: { open: boolean; onClose: () => vo
   const select = (id: string, label: string) => {
     setTable(id, label);
     saveTable({ ...tables.find((t) => t.id === id)!, status: 'occupied' });
-    clearCart();
+
+    // Check if there's an existing draft order for this table — resume it instead of clearing
+    const existingDraft = orders.find((o) => o.status === 'draft' && o.tableLabel === label);
+    if (existingDraft) {
+      const cartItems = existingDraft.items.map((i, idx) => ({
+        id: `resume-${idx}-${Date.now()}`,
+        name: i.name,
+        price: i.price,
+        qty: i.qty,
+      }));
+      loadOrder(cartItems, label, existingDraft.customer ? { id: 'cu-resume', name: existingDraft.customer } : null);
+      toast.info(`Resumed draft ${existingDraft.orderNum} for Table ${label}.`);
+    } else {
+      clearCart();
+    }
     onClose();
   };
 
@@ -43,6 +58,7 @@ export function FloorPopup({ open, onClose }: { open: boolean; onClose: () => vo
           {floorTables.map((t) => {
             const occupied = t.status === 'occupied';
             const reserved = t.status === 'reserved';
+            const hasDraft = orders.some((o) => o.status === 'draft' && o.tableLabel === t.label);
             return (
               <button
                 key={t.id}
@@ -57,6 +73,7 @@ export function FloorPopup({ open, onClose }: { open: boolean; onClose: () => vo
                 <span className="font-display text-[28px] text-text leading-none">{t.label}</span>
                 <span className="mt-2 text-[14px] tracking-[0.18em] uppercase font-extralight text-text-faint">{t.seats} seats</span>
                 {occupied && <span className="mt-2 w-1.5 h-1.5 bg-gold" />}
+                {hasDraft && <span className="mt-1 text-[12px] tracking-[0.12em] uppercase text-gold">Draft</span>}
                 {reserved && <span className="mt-2 text-[14px] tracking-[0.18em] uppercase text-cancel">Reserved</span>}
               </button>
             );

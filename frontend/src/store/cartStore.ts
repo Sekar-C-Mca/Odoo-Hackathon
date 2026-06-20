@@ -7,6 +7,9 @@ export interface CartItem {
   qty: number;
   categoryColor?: string;
   notes?: string;
+  discount?: number; // product-level discount amount
+  discountType?: 'percent' | 'flat';
+  discountValue?: number;
 }
 
 interface CartState {
@@ -21,7 +24,9 @@ interface CartState {
   updateQty: (id: string, qty: number) => void;
   removeItem: (id: string) => void;
   applyCoupon: (c: CartState['coupon']) => void;
+  applyItemDiscount: (id: string, type: 'percent' | 'flat', value: number) => void;
   clearCart: () => void;
+  loadOrder: (items: CartItem[], tableLabel: string | null, customer: { id: string; name: string } | null) => void;
 }
 
 export const useCartStore = create<CartState>((set) => ({
@@ -54,25 +59,40 @@ export const useCartStore = create<CartState>((set) => ({
   removeItem: (id) =>
     set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
   applyCoupon: (coupon) => set({ coupon }),
+  applyItemDiscount: (id, type, value) =>
+    set((s) => ({
+      items: s.items.map((i) => {
+        if (i.id !== id) return i;
+        const disc = type === 'percent' ? Math.round((i.price * i.qty * value) / 100) : Math.min(value, i.price * i.qty);
+        return { ...i, discount: disc, discountType: type, discountValue: value };
+      }),
+    })),
   clearCart: () =>
     set({ items: [], customer: null, coupon: null }),
+  loadOrder: (items, tableLabel, customer) =>
+    set({ items, tableLabel, tableId: tableLabel ? `t-load` : null, customer, coupon: null }),
 }));
 
 export function cartSubtotal(items: CartItem[]): number {
   return items.reduce((sum, i) => sum + i.price * i.qty, 0);
 }
 
+export function cartItemDiscounts(items: CartItem[]): number {
+  return items.reduce((sum, i) => sum + (i.discount ?? 0), 0);
+}
+
 export function cartTotals(items: CartItem[], coupon: CartState['coupon']) {
   const subtotal = cartSubtotal(items);
-  let discount = 0;
+  const itemDiscounts = cartItemDiscounts(items);
+  const afterItemDisc = subtotal - itemDiscounts;
+  const gst = Math.round(afterItemDisc * 0.05);
+  let orderDiscount = 0;
   if (coupon) {
-    discount =
+    orderDiscount =
       coupon.type === 'percent'
-        ? Math.round((subtotal * coupon.value) / 100)
-        : Math.min(coupon.value, subtotal);
+        ? Math.round((afterItemDisc * coupon.value) / 100)
+        : Math.min(coupon.value, afterItemDisc);
   }
-  const taxable = subtotal - discount;
-  const gst = Math.round(taxable * 0.05);
-  const total = taxable + gst;
-  return { subtotal, discount, gst, total };
+  const total = afterItemDisc + gst - orderDiscount;
+  return { subtotal, itemDiscounts, gst, orderDiscount, total };
 }

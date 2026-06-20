@@ -1,21 +1,25 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Menu, LogOut } from 'lucide-react';
+import { Menu, LogOut, Printer, RefreshCw, Plus, User } from 'lucide-react';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { MobileNavSheet } from '../../components/shared/MobileNavSheet';
 import { useAuthStore } from '../../store/authStore';
 import { toast } from '../../components/ui/Toast';
 
 const navItems = [
-  { to: '/admin/dashboard', label: 'Dashboard' },
   { to: '/admin/products', label: 'Products' },
-  { to: '/admin/categories', label: 'Categories' },
-  { to: '/admin/payment', label: 'Payment' },
-  { to: '/admin/coupons', label: 'Coupons' },
-  { to: '/admin/tables', label: 'Tables' },
-  { to: '/admin/employees', label: 'Employees' },
-  { to: '/admin/self-order', label: 'Self-Order' },
+  { to: '/admin/categories', label: 'Category' },
+  { to: '/admin/payment', label: 'Payment method' },
+  { to: '/admin/coupons', label: 'Coupon & Promotion' },
+  { to: '/admin/tables', label: 'Booking' },
+  { to: '/admin/employees', label: 'User/Employee' },
+  { to: '/kds', label: 'KDS' },
   { to: '/admin/reports', label: 'Reports' },
+];
+
+const mobileNavItems = [
+  ...navItems,
+  { to: '/login', label: 'Log-Out' },
 ];
 
 export function AdminLayout() {
@@ -42,13 +46,13 @@ export function AdminLayout() {
             </span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="hidden lg:flex items-center gap-5">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `text-[15px] tracking-[0.18em] uppercase font-light transition-colors ${
+                  `text-[13px] tracking-[0.14em] uppercase font-light transition-colors whitespace-nowrap ${
                     isActive ? 'text-gold' : 'text-text-muted hover:text-text'
                   }`
                 }
@@ -59,8 +63,17 @@ export function AdminLayout() {
           </nav>
 
           <div className="flex items-center gap-1">
+            <button onClick={() => toast.info('Print queued.')} className="hidden sm:flex p-2 text-text-muted hover:text-gold min-h-[40px] min-w-[40px] items-center justify-center" aria-label="Print">
+              <Printer size={16} />
+            </button>
+            <button onClick={() => toast.info('Synced.')} className="hidden sm:flex p-2 text-text-muted hover:text-gold min-h-[40px] min-w-[40px] items-center justify-center" aria-label="Sync">
+              <RefreshCw size={16} />
+            </button>
             <ThemeToggle />
             <div className="hidden sm:flex items-center gap-3 ml-2 pl-3 border-l border-border">
+              <button className="p-2 text-text-muted hover:text-gold min-h-[40px] min-w-[40px] flex items-center justify-center" aria-label="User">
+                <User size={16} />
+              </button>
               <div className="text-right">
                 <div className="text-[16px] font-light text-text leading-tight">{user?.name}</div>
                 <div className="text-[14px] tracking-[0.2em] uppercase text-text-faint">{user?.role}</div>
@@ -75,7 +88,7 @@ export function AdminLayout() {
             </div>
             <button
               onClick={() => setNavOpen(true)}
-              className="md:hidden text-text-muted hover:text-gold p-2 min-h-[40px] min-w-[40px] flex items-center justify-center"
+              className="lg:hidden text-text-muted hover:text-gold p-2 min-h-[40px] min-w-[40px] flex items-center justify-center"
               aria-label="Open menu"
             >
               <Menu size={20} />
@@ -84,7 +97,7 @@ export function AdminLayout() {
         </div>
       </header>
 
-      <MobileNavSheet open={navOpen} onClose={() => setNavOpen(false)} items={navItems} />
+      <MobileNavSheet open={navOpen} onClose={() => setNavOpen(false)} items={mobileNavItems} />
 
       <main className="flex-1 px-4 sm:px-6 py-6 sm:py-8 max-w-[1400px] w-full mx-auto">
         <Outlet />

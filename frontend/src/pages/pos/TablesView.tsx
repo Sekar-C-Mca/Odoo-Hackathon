@@ -5,13 +5,14 @@ import { FloorPopup } from './FloorPopup';
 import { useCatalogStore } from '../../store/catalogStore';
 import { useCartStore } from '../../store/cartStore';
 import { useNavigate } from 'react-router-dom';
+import { toast } from '../../components/ui/Toast';
 
 const statusVariant = (s: string) =>
   s === 'occupied' ? 'paid' : s === 'reserved' ? 'cancel' : 'stone';
 
 export function TablesView() {
-  const { floors, tables, saveTable } = useCatalogStore();
-  const { setTable, clearCart } = useCartStore();
+  const { floors, tables, orders, saveTable } = useCatalogStore();
+  const { setTable, loadOrder, clearCart } = useCartStore();
   const navigate = useNavigate();
   const [floorOpen, setFloorOpen] = useState(false);
   const [activeFloor, setActiveFloor] = useState(floors[0]?.id ?? '');
@@ -24,7 +25,19 @@ export function TablesView() {
     if (status === 'available') {
       saveTable({ ...tables.find((t) => t.id === id)!, status: 'occupied' });
     }
-    clearCart();
+    const existingDraft = orders.find((o) => o.status === 'draft' && o.tableLabel === label);
+    if (existingDraft) {
+      const cartItems = existingDraft.items.map((i, idx) => ({
+        id: `resume-${idx}-${Date.now()}`,
+        name: i.name,
+        price: i.price,
+        qty: i.qty,
+      }));
+      loadOrder(cartItems, label, existingDraft.customer ? { id: 'cu-resume', name: existingDraft.customer } : null);
+      toast.info(`Resumed draft ${existingDraft.orderNum} for Table ${label}.`);
+    } else {
+      clearCart();
+    }
     navigate('/pos');
   };
 
