@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, LayoutGrid } from 'lucide-react';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { SectionLabel, Button, Input, Modal, Badge } from '../../components/ui';
@@ -8,18 +8,35 @@ import { toast } from '../../components/ui/Toast';
 import type { FloorTable } from '../../data/seed';
 
 export function TablesPage() {
-  const { floors, tables, saveTable, deleteTable, addFloor } = useCatalogStore();
+  const { floors, tables, saveTable, deleteTable, addFloor, deleteFloor } = useCatalogStore();
   const [activeFloor, setActiveFloor] = useState(floors[0]?.id ?? '');
   const [modalOpen, setModalOpen] = useState(false);
   const [floorModalOpen, setFloorModalOpen] = useState(false);
   const [draft, setDraft] = useState<FloorTable>({ id: '', label: '', floorId: '', seats: 2, status: 'available' });
   const [editing, setEditing] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [confirmFloorId, setConfirmFloorId] = useState<string | null>(null);
   const [floorName, setFloorName] = useState('');
+  const [savingTable, setSavingTable] = useState(false);
+  const [savingFloor, setSavingFloor] = useState(false);
 
   const floorTables = tables.filter((t) => t.floorId === activeFloor);
 
+  useEffect(() => {
+    if (!floors.length) {
+      setActiveFloor('');
+      return;
+    }
+    if (!floors.some((floor) => floor.id === activeFloor)) {
+      setActiveFloor(floors[0].id);
+    }
+  }, [floors, activeFloor]);
+
   const openNew = () => {
+    if (!activeFloor) {
+      toast.error('Create a floor before adding a table.');
+      return;
+    }
     setDraft({ id: `t-${Date.now()}`, label: '', floorId: activeFloor, seats: 2, status: 'available' });
     setEditing(false);
     setModalOpen(true);
@@ -29,21 +46,49 @@ export function TablesPage() {
     setEditing(true);
     setModalOpen(true);
   };
-  const save = () => {
+  const save = async () => {
     if (!draft.label.trim()) {
       toast.error('Table label is required.');
       return;
     }
-    saveTable(draft);
-    toast.success(editing ? 'Table updated.' : 'Table created.');
-    setModalOpen(false);
+    if (!draft.floorId) {
+      toast.error('Select a floor before creating a table.');
+      return;
+    }
+    setSavingTable(true);
+    try {
+      await saveTable({ ...draft, label: draft.label.trim() });
+      toast.success(editing ? 'Table updated.' : 'Table created.');
+      setModalOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save table.');
+    } finally {
+      setSavingTable(false);
+    }
   };
-  const createFloor = () => {
+  const createFloor = async () => {
     if (!floorName.trim()) return;
-    addFloor(floorName.trim());
-    toast.success('Floor added.');
-    setFloorName('');
-    setFloorModalOpen(false);
+    setSavingFloor(true);
+    try {
+      const floor = await addFloor(floorName.trim());
+      setActiveFloor(floor.id);
+      toast.success('Floor added.');
+      setFloorName('');
+      setFloorModalOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to add floor.');
+    } finally {
+      setSavingFloor(false);
+    }
+  };
+  const removeFloor = async () => {
+    if (!confirmFloorId) return;
+    try {
+      await deleteFloor(confirmFloorId);
+      toast.info('Floor removed.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to delete floor.');
+    }
   };
 
   const statusVariant = (s: FloorTable['status']) =>
@@ -65,17 +110,29 @@ export function TablesPage() {
 
       <div className="flex gap-2 mb-2 overflow-x-auto no-scrollbar">
         {floors.map((f) => (
-          <button
+          <div
             key={f.id}
-            onClick={() => setActiveFloor(f.id)}
-            className={`px-4 py-2 text-[15px] tracking-[0.18em] uppercase font-light whitespace-nowrap transition-colors min-h-[40px] ${
+            className={`flex items-stretch whitespace-nowrap transition-colors border ${
               activeFloor === f.id
-                ? 'text-gold border border-[rgba(0,117,74,0.4)] bg-[rgba(0,117,74,0.05)]'
-                : 'text-text-muted border border-border'
+                ? 'text-gold border-[rgba(0,117,74,0.4)] bg-[rgba(0,117,74,0.05)]'
+                : 'text-text-muted border-border'
             }`}
           >
-            {f.name}
-          </button>
+            <button
+              onClick={() => setActiveFloor(f.id)}
+              className="px-4 py-2 text-[15px] tracking-[0.18em] uppercase font-light min-h-[40px]"
+            >
+              {f.name}
+            </button>
+            <button
+              onClick={() => setConfirmFloorId(f.id)}
+              className="px-3 min-h-[40px] border-l border-inherit hover:text-cancel flex items-center justify-center"
+              aria-label={`Delete ${f.name}`}
+              title="Delete floor"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         ))}
       </div>
       <SectionLabel>{floorTables.length} tables</SectionLabel>
@@ -103,7 +160,9 @@ export function TablesPage() {
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={save}>{editing ? 'Save' : 'Create'}</Button>
+            <Button size="sm" onClick={() => void save()} disabled={savingTable}>
+              {savingTable ? 'Saving…' : editing ? 'Save' : 'Create'}
+            </Button>
           </>
         }
       >
@@ -120,12 +179,28 @@ export function TablesPage() {
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setFloorModalOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={createFloor}>Create floor</Button>
+            <Button size="sm" onClick={() => void createFloor()} disabled={savingFloor}>
+              {savingFloor ? 'Creating…' : 'Create floor'}
+            </Button>
           </>
         }
       >
         <Input label="Floor name" value={floorName} onChange={(e) => setFloorName(e.target.value)} placeholder="e.g. Patio" />
       </Modal>
+
+      <ConfirmDialog
+        open={confirmFloorId !== null}
+        onClose={() => setConfirmFloorId(null)}
+        onConfirm={() => void removeFloor()}
+        title="Delete floor"
+        message={
+          confirmFloorId && tables.some((table) => table.floorId === confirmFloorId)
+            ? 'This floor contains tables. Delete its tables first, then delete the floor.'
+            : 'This will permanently remove the floor.'
+        }
+        confirmLabel="Delete floor"
+        danger
+      />
 
       <ConfirmDialog
         open={confirmId !== null}

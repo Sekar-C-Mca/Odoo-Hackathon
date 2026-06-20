@@ -13,35 +13,45 @@ export function CategoriesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
   const count = (id: string) => products.filter((p) => p.categoryId === id).length;
 
   const addInline = () => {
-    const newCat: Category = {
-      id: `c-${Date.now()}`,
-      name: '',
-      color: CATEGORY_PALETTE[categories.length % CATEGORY_PALETTE.length],
-      sortOrder: categories.length,
-    };
-    saveCategory(newCat);
-    setEditingId(newCat.id);
+    setCreating(true);
+    setEditingId(null);
     setEditName('');
-    setEditColor(newCat.color);
+    setEditColor(CATEGORY_PALETTE[categories.length % CATEGORY_PALETTE.length]);
   };
 
-  const saveInline = (id: string) => {
+  const saveInline = async (id?: string) => {
     if (!editName.trim()) {
       toast.error('Category name is required.');
       return;
     }
-    saveCategory({ id, name: editName.trim(), color: editColor, sortOrder: categories.findIndex((c) => c.id === id) });
-    toast.success('Category saved.');
-    setEditingId(null);
+    setSaving(true);
+    try {
+      await saveCategory({
+        id: id ?? `c-${Date.now()}`,
+        name: editName.trim(),
+        color: editColor,
+        sortOrder: id ? categories.findIndex((c) => c.id === id) : categories.length,
+      });
+      toast.success(id ? 'Category saved.' : 'Category created.');
+      setEditingId(null);
+      setCreating(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to save category.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const startEdit = (c: Category) => {
+    setCreating(false);
     setEditingId(c.id);
     setEditName(c.name);
     setEditColor(c.color);
@@ -85,6 +95,46 @@ export function CategoriesPage() {
           <span></span>
         </div>
 
+        {creating && (
+          <div className="grid grid-cols-[40px_1fr_100px_80px_60px] items-center px-4 py-3 border-b border-border bg-[rgba(0,117,74,0.02)]">
+            <div />
+            <div className="flex items-center gap-2">
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveInline();
+                  if (e.key === 'Escape') setCreating(false);
+                }}
+                autoFocus
+                placeholder="Category name"
+                className="bg-transparent border-b border-gold py-1 text-[17px] font-light text-text outline-none w-full max-w-[200px]"
+              />
+              <Button size="sm" onClick={() => void saveInline()} disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setCreating(false)}>✕</Button>
+            </div>
+            <div className="flex items-center gap-1">
+              {CATEGORY_PALETTE.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setEditColor(color)}
+                  className="w-6 h-6 rounded-full border-2 transition-transform"
+                  style={{
+                    background: color,
+                    borderColor: editColor === color ? 'var(--text)' : 'transparent',
+                    transform: editColor === color ? 'scale(1.2)' : 'scale(1)',
+                  }}
+                />
+              ))}
+            </div>
+            <span className="text-[16px] font-light text-text-muted">0</span>
+            <div />
+          </div>
+        )}
+
         {categories.map((c, idx) => (
           <div
             key={c.id}
@@ -106,12 +156,14 @@ export function CategoriesPage() {
                   <input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') saveInline(c.id); if (e.key === 'Escape') setEditingId(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void saveInline(c.id); if (e.key === 'Escape') setEditingId(null); }}
                     autoFocus
                     placeholder="Category name"
                     className="bg-transparent border-b border-gold py-1 text-[17px] font-light text-text outline-none w-full max-w-[200px]"
                   />
-                  <Button size="sm" onClick={() => saveInline(c.id)}>Save</Button>
+                  <Button size="sm" onClick={() => void saveInline(c.id)} disabled={saving}>
+                    {saving ? 'Saving…' : 'Save'}
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>✕</Button>
                 </div>
               ) : (

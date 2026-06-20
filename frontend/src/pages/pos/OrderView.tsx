@@ -58,6 +58,10 @@ export function OrderView() {
     () => products.filter((p) => p.available && (activeCat === 'all' || p.categoryId === activeCat)),
     [products, activeCat]
   );
+  const availableCoupons = useMemo(
+    () => coupons.filter((item) => item.active && item.promoType === 'manual'),
+    [coupons]
+  );
   const totals = useMemo(() => cartTotals(items, coupon), [items, coupon]);
 
   const saveDraft = async () => {
@@ -94,20 +98,25 @@ export function OrderView() {
   };
 
   const applyCouponCode = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) {
+      toast.error('Enter a coupon code.');
+      return;
+    }
     try {
       const validation = await api<{ type: 'PERCENTAGE' | 'FIXED'; value: number }>(
         '/api/coupons/validate',
         {
           method: 'POST',
-          body: JSON.stringify({ code: couponCode.trim(), orderTotal: totals.subtotal }),
+          body: JSON.stringify({ code, orderTotal: totals.subtotal }),
         }
       );
       applyCoupon({
-        code: couponCode.trim().toUpperCase(),
+        code,
         type: validation.type === 'PERCENTAGE' ? 'percent' : 'flat',
         value: Number(validation.value),
       });
-      toast.success(`Coupon ${couponCode.trim().toUpperCase()} applied.`);
+      toast.success(`Coupon ${code} applied.`);
       setCouponOpen(false);
       setCouponCode('');
     } catch (cause) {
@@ -138,18 +147,20 @@ export function OrderView() {
         <div className="flex flex-col">
           {items.map((i) => (
             <div key={i.id} className="py-3 border-b border-border">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-[17px] font-light text-text truncate">{i.name}</div>
-                  <div className="text-[15px] font-extralight text-text-faint">₹{i.price} each</div>
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-2 gap-y-3">
+                <div className="min-w-0">
+                  <div className="text-[17px] font-light leading-snug text-text break-words">{i.name}</div>
+                  <div className="mt-1 text-[15px] font-extralight text-text-faint">₹{i.price} each</div>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="min-w-[4rem] pt-0.5 text-right font-display text-[18px] text-text">
+                  ₹{i.price * i.qty}
+                </div>
+                <button onClick={() => removeItem(i.id)} className="w-9 h-9 flex items-center justify-center text-text-faint hover:text-cancel" aria-label={`Remove ${i.name}`}><Trash2 size={13} /></button>
+                <div className="col-span-3 flex items-center justify-end gap-1.5">
                   <button onClick={() => updateQty(i.id, i.qty - 1)} className="w-9 h-9 flex items-center justify-center border border-border text-text-muted hover:border-gold hover:text-gold transition-colors" aria-label="Decrease"><Minus size={13} /></button>
                   <span className="w-7 text-center text-[17px] font-light text-text">{i.qty}</span>
                   <button onClick={() => updateQty(i.id, i.qty + 1)} className="w-9 h-9 flex items-center justify-center border border-border text-text-muted hover:border-gold hover:text-gold transition-colors" aria-label="Increase"><Plus size={13} /></button>
                 </div>
-                <div className="w-16 text-right font-display text-[18px] text-text">₹{i.price * i.qty}</div>
-                <button onClick={() => removeItem(i.id)} className="w-9 h-9 flex items-center justify-center text-text-faint hover:text-cancel" aria-label="Remove"><Trash2 size={13} /></button>
               </div>
               {/* Product-level discount display */}
               {i.discount && i.discount > 0 && (
@@ -180,7 +191,22 @@ export function OrderView() {
           <div className="flex flex-wrap gap-2 mt-3">
             <Button variant="ghost" size="sm" onClick={() => navigate('/pos/customers')}><UserPlus size={13} /> {customer ? 'Change' : 'Customer'}</Button>
             <Button variant="ghost" size="sm" onClick={() => setDiscountOpen(!discountOpen)}><Percent size={13} /> Discount</Button>
-            <Button variant="ghost" size="sm" onClick={() => setCouponOpen(!couponOpen)}><Tag size={13} /> {coupon ? coupon.code : 'Coupon'}</Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const opening = !couponOpen;
+                setCouponOpen(opening);
+                if (opening) {
+                  const appliedCouponAvailable = availableCoupons.some(
+                    (item) => item.code === coupon?.code
+                  );
+                  setCouponCode(appliedCouponAvailable ? coupon?.code ?? '' : '');
+                }
+              }}
+            >
+              <Tag size={13} /> {coupon ? coupon.code : 'Coupon'}
+            </Button>
           </div>
           {/* Discount popup */}
           {discountOpen && (
@@ -201,10 +227,26 @@ export function OrderView() {
             </div>
           )}
           {couponOpen && (
-            <div className="mt-3 flex gap-2">
-              <input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="WELCOME10" className="flex-1 bg-transparent border-b border-border py-2 text-[17px] font-light text-text outline-none focus:border-gold placeholder:text-text-faint" />
-              <Button size="sm" onClick={applyCouponCode}>Apply</Button>
-            </div>
+            availableCoupons.length > 0 ? (
+              <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+                <Select
+                  label="Available coupons"
+                  value={couponCode}
+                  onChange={(event) => setCouponCode(event.target.value)}
+                >
+                  <option value="">Select a coupon</option>
+                  {availableCoupons.map((item) => (
+                    <option key={item.id} value={item.code}>
+                      {item.code} — {item.type === 'percent' ? `${item.value}% off` : `₹${item.value} off`}
+                      {item.minOrder > 0 ? ` (min ₹${item.minOrder})` : ''}
+                    </option>
+                  ))}
+                </Select>
+                <Button className="shrink-0" size="sm" disabled={!couponCode} onClick={applyCouponCode}>Apply</Button>
+              </div>
+            ) : (
+              <p className="mt-3 text-[15px] font-light text-text-faint">No coupons are currently available.</p>
+            )
           )}
           <Button fullWidth size="lg" className="mt-4" variant="ghost" onClick={sendToKitchen}><Send size={14} /> Send to kitchen</Button>
           <Button fullWidth size="lg" className="mt-2" onClick={() => navigate('/pos/payment')}>Charge ₹{totals.total}</Button>
@@ -214,16 +256,16 @@ export function OrderView() {
   );
 
   const CartPanel = ({ className = '' }: { className?: string }) => (
-    <div className={`flex flex-col h-full p-5 ${className}`} style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+    <div className={`flex min-w-0 flex-col h-full overflow-y-auto p-5 ${className}`} style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
       <CartContents />
     </div>
   );
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row">
+    <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
       <FloorPopup open={floorOpen} onClose={() => setFloorOpen(false)} />
 
-      <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 overflow-hidden">
         <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
           <div className="flex gap-1 overflow-x-auto no-scrollbar">
             <button onClick={() => setActiveCat('all')} className={`px-3.5 py-2 text-[15px] font-semibold whitespace-nowrap min-h-[40px] border bg-transparent ${activeCat === 'all' ? 'text-text border-text' : 'text-text-muted border-border'}`}>All</button>
@@ -270,7 +312,7 @@ export function OrderView() {
 
       {/* Desktop cart */}
       {!isMobile && (
-        <div className="w-[380px] shrink-0 p-4 sm:p-6 pl-0">
+        <div className="min-w-0 w-[380px] shrink-0 p-4 sm:p-6 pl-0">
           <CartPanel className="h-full" />
         </div>
       )}

@@ -44,6 +44,8 @@ export interface CouponDto {
   code: string;
   discountType: 'PERCENTAGE' | 'FIXED';
   discountValue: number;
+  minOrderAmount: number | null;
+  active: boolean;
 }
 
 export interface PromotionDto {
@@ -55,6 +57,7 @@ export interface PromotionDto {
   minOrderAmount: number | null;
   discountType: 'PERCENTAGE' | 'FIXED';
   discountValue: number;
+  active: boolean;
 }
 
 export interface PaymentMethodDto {

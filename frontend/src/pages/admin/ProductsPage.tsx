@@ -13,7 +13,7 @@ const blank: Product = {
   id: '',
   name: '',
   price: 0,
-  categoryId: 'c-coffee',
+  categoryId: '',
   taxRate: 5,
   uom: 'pc',
   available: true,
@@ -33,6 +33,7 @@ export function ProductsPage() {
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [showNewCat, setShowNewCat] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const filtered = useMemo(
     () =>
@@ -58,7 +59,7 @@ export function ProductsPage() {
   };
 
   const openNew = () => {
-    setDraft({ ...blank, id: `p-${Date.now()}` });
+    setDraft({ ...blank, id: `p-${Date.now()}`, categoryId: categories[0]?.id ?? '' });
     setEditing(false);
     setDrawerOpen(true);
   };
@@ -67,17 +68,28 @@ export function ProductsPage() {
     setEditing(true);
     setDrawerOpen(true);
   };
-  const save = () => {
+  const save = async () => {
     if (!draft.name.trim() || draft.price <= 0) {
       toast.error('Name and price are required.');
       return;
     }
-    saveProduct(draft);
-    toast.success(editing ? 'Product updated.' : 'Product created.');
-    setDrawerOpen(false);
+    if (!categories.some((category) => category.id === draft.categoryId)) {
+      toast.error('Please select a category.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveProduct(draft);
+      toast.success(editing ? 'Product updated.' : 'Product created.');
+      setDrawerOpen(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to save product.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleCreateCategory = () => {
+  const handleCreateCategory = async () => {
     if (!newCatName.trim()) return;
     const newCat = {
       id: `c-${Date.now()}`,
@@ -85,11 +97,15 @@ export function ProductsPage() {
       color: CATEGORY_PALETTE[categories.length % CATEGORY_PALETTE.length],
       sortOrder: categories.length,
     };
-    saveCategory(newCat);
-    setDraft({ ...draft, categoryId: newCat.id });
-    setNewCatName('');
-    setShowNewCat(false);
-    toast.success(`Category "${newCat.name}" created and assigned.`);
+    try {
+      const savedCategory = await saveCategory(newCat);
+      setDraft((current) => ({ ...current, categoryId: savedCategory.id }));
+      setNewCatName('');
+      setShowNewCat(false);
+      toast.success(`Category "${savedCategory.name}" created and assigned.`);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to create category.');
+    }
   };
 
   // Check if typed category doesn't exist
@@ -237,7 +253,9 @@ export function ProductsPage() {
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setDrawerOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={save}>{editing ? 'Save changes' : 'Create product'}</Button>
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : editing ? 'Save changes' : 'Create product'}
+            </Button>
           </>
         }
       >

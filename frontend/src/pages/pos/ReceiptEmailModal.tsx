@@ -1,18 +1,42 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Mail, Send } from 'lucide-react';
 import { Button, Input } from '../../components/ui';
 import { toast } from '../../components/ui/Toast';
 import { api } from '../../api/client';
 
-export function ReceiptEmailModal({ open, onClose, orderId, orderNum, total }: { open: boolean; onClose: () => void; orderId: string | null; orderNum: string; total: number }) {
+interface ReceiptEmailModalProps {
+  open: boolean;
+  onClose: () => void;
+  orderId: string | null;
+  orderNum: string;
+  total: number;
+  initialEmail?: string;
+}
+
+export function ReceiptEmailModal({
+  open,
+  onClose,
+  orderId,
+  orderNum,
+  total,
+  initialEmail = '',
+}: ReceiptEmailModalProps) {
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      setEmail(initialEmail);
+      setSent(false);
+    }
+  }, [open, initialEmail]);
+
   if (!open) return null;
 
   const handleSend = async () => {
-    if (!email.includes('@')) {
+    const recipient = email.trim().toLowerCase();
+    if (!recipient || !recipient.includes('@')) {
       toast.error('Please enter a valid email address.');
       return;
     }
@@ -24,10 +48,10 @@ export function ReceiptEmailModal({ open, onClose, orderId, orderNum, total }: {
     try {
       await api(`/api/orders/${orderId}/receipt/email`, {
         method: 'POST',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: recipient }),
       });
       setSent(true);
-      toast.success(`Receipt sent to ${email}.`);
+      toast.success(`Receipt sent to ${recipient}.`);
       window.setTimeout(() => {
         setSent(false);
         setEmail('');
@@ -65,6 +89,10 @@ export function ReceiptEmailModal({ open, onClose, orderId, orderNum, total }: {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="customer@example.com"
+          autoComplete="email"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !sending && !sent) void handleSend();
+          }}
         />
         <Button
           fullWidth

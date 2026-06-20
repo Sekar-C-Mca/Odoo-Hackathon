@@ -40,18 +40,28 @@ export function CustomerPage() {
     toast.success(`${name} attached to order.`);
   };
 
-  const addNew = () => {
+  const addNew = async () => {
     if (!name.trim() || !phone.trim()) {
       toast.error('Name and phone are required.');
       return;
     }
-    const id = `cu-${Date.now()}`;
-    saveCustomer({ id, name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, visits: 0, totalSpend: 0 });
-    select(id, name.trim());
-    setName('');
-    setPhone('');
-    setEmail('');
-    setAdding(false);
+    try {
+      await saveCustomer({
+        id: `cu-${Date.now()}`,
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        visits: 0,
+        totalSpend: 0,
+      });
+      toast.success('Customer created. Select a customer to attach them to the order.');
+      setName('');
+      setPhone('');
+      setEmail('');
+      setAdding(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to create customer.');
+    }
   };
 
   const openEdit = (c: Customer) => {
@@ -129,7 +139,7 @@ export function CustomerPage() {
                 <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="priya@example.com" />
                 <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." />
                 <div className="flex gap-2">
-                  <Button size="md" onClick={addNew}>Create & attach</Button>
+                  <Button size="md" onClick={() => void addNew()}>Create customer</Button>
                   <Button variant="ghost" size="md" onClick={() => setAdding(false)}>Discard</Button>
                 </div>
               </div>

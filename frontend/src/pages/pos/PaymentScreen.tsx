@@ -15,7 +15,7 @@ type Method = 'cash' | 'upi' | 'card';
 export function PaymentScreen() {
   const navigate = useNavigate();
   const { orderId, items, tableId, tableLabel, coupon, customer, clearCart, setOrder } = useCartStore();
-  const { paymentMethods, refreshOrders } = useCatalogStore();
+  const { paymentMethods, customers, refreshOrders } = useCatalogStore();
   const sessionId = useSessionStore((s) => s.sessionId);
   const totals = useMemo(() => cartTotals(items, coupon), [items, coupon]);
   const [method, setMethod] = useState<Method>('cash');
@@ -25,6 +25,7 @@ export function PaymentScreen() {
   const [orderNum, setOrderNum] = useState('');
   const [paidOrderId, setPaidOrderId] = useState<string | null>(null);
   const [paidTotal, setPaidTotal] = useState(0);
+  const [paidCustomerEmail, setPaidCustomerEmail] = useState('');
   const [emailOpen, setEmailOpen] = useState(false);
   const [paying, setPaying] = useState(false);
 
@@ -88,6 +89,9 @@ export function PaymentScreen() {
       setPaidOrderId(String(paid.id));
       setOrderNum(paid.orderNumber);
       setPaidTotal(Number(paid.totalAmount));
+      setPaidCustomerEmail(
+        customer ? customers.find((item) => item.id === customer.id)?.email ?? '' : ''
+      );
       await refreshOrders();
       toast.success(`${paid.orderNumber} paid via ${pm}.`);
       clearCart();
@@ -119,6 +123,7 @@ export function PaymentScreen() {
           orderNum={orderNum}
           total={paidTotal}
           orderId={paidOrderId}
+          initialEmail={paidCustomerEmail}
         />
       </div>
     );

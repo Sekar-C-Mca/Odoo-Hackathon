@@ -49,7 +49,7 @@ interface CatalogState {
   saveProduct: (product: Product) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   deleteProducts: (ids: string[]) => Promise<void>;
-  saveCategory: (category: Category) => Promise<void>;
+  saveCategory: (category: Category) => Promise<Category>;
   deleteCategory: (id: string) => Promise<void>;
   reorderCategories: (categories: Category[]) => void;
   saveEmployee: (employee: Employee) => Promise<void>;
@@ -62,7 +62,8 @@ interface CatalogState {
   deleteCoupon: (id: string) => Promise<void>;
   saveTable: (table: FloorTable) => Promise<void>;
   deleteTable: (id: string) => Promise<void>;
-  addFloor: (name: string) => Promise<void>;
+  addFloor: (name: string) => Promise<Floor>;
+  deleteFloor: (id: string) => Promise<void>;
   savePaymentMethod: (method: PaymentMethod) => Promise<void>;
   deletePaymentMethod: (id: string) => Promise<void>;
   togglePaymentMethod: (id: string) => Promise<void>;
@@ -87,6 +88,28 @@ const categoryFromDto = (value: CategoryDto): Category => ({
   id: String(value.id),
   name: value.name,
   color: value.colorHex,
+});
+const couponFromDto = (value: CouponDto): Coupon => ({
+  id: String(value.id),
+  code: value.code,
+  type: value.discountType === 'PERCENTAGE' ? 'percent' : 'flat',
+  value: Number(value.discountValue),
+  active: value.active,
+  minOrder: Number(value.minOrderAmount ?? 0),
+  promoType: 'manual',
+});
+const promotionFromDto = (value: PromotionDto): Coupon => ({
+  id: `promotion-${value.id}`,
+  code: value.name,
+  type: value.discountType === 'PERCENTAGE' ? 'percent' : 'flat',
+  value: Number(value.discountValue),
+  active: value.active,
+  minOrder: Number(value.minOrderAmount ?? 0),
+  promoType: value.appliesTo === 'PRODUCT' ? 'auto_product' : 'auto_order',
+  applyTo: value.appliesTo.toLowerCase() as 'product' | 'order',
+  productId: value.productId ? String(value.productId) : undefined,
+  minQty: value.minQuantity ?? undefined,
+  orderThreshold: value.minOrderAmount ?? undefined,
 });
 const employeeFromDto = (value: UserDto): Employee => ({
   id: String(value.id),
@@ -216,28 +239,8 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         status: occupiedTableIds.has(table.id) ? ('occupied' as const) : table.status,
       }));
       const coupons: Coupon[] = [
-        ...couponsDto.map((coupon) => ({
-          id: String(coupon.id),
-          code: coupon.code,
-          type: coupon.discountType === 'PERCENTAGE' ? ('percent' as const) : ('flat' as const),
-          value: Number(coupon.discountValue),
-          active: true,
-          minOrder: 0,
-          promoType: 'manual' as const,
-        })),
-        ...promotions.map((promotion) => ({
-          id: `promotion-${promotion.id}`,
-          code: promotion.name,
-          type: promotion.discountType === 'PERCENTAGE' ? ('percent' as const) : ('flat' as const),
-          value: Number(promotion.discountValue),
-          active: true,
-          minOrder: Number(promotion.minOrderAmount ?? 0),
-          promoType: promotion.appliesTo === 'PRODUCT' ? ('auto_product' as const) : ('auto_order' as const),
-          applyTo: promotion.appliesTo.toLowerCase() as 'product' | 'order',
-          productId: promotion.productId ? String(promotion.productId) : undefined,
-          minQty: promotion.minQuantity ?? undefined,
-          orderThreshold: promotion.minOrderAmount ?? undefined,
-        })),
+        ...couponsDto.map(couponFromDto),
+        ...promotions.map(promotionFromDto),
       ];
       set({
         products: productsPage.content.map(productFromDto),
@@ -335,11 +338,16 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
 
   saveProduct: async (product) => {
     const existing = get().products.some((item) => item.id === product.id);
+    const categoryId = Number(product.categoryId);
+    if (!Number.isInteger(categoryId) || categoryId <= 0) {
+      throw new Error('Please select a valid category.');
+    }
     const dto = await api<ProductDto>(existing ? `/api/products/${product.id}` : '/api/products', {
       method: existing ? 'PUT' : 'POST',
       body: JSON.stringify({
         name: product.name,
-        categoryId: Number(product.categoryId),
+        categoryId,
+        taxRate: product.taxRate,
         price: product.price,
         unitOfMeasure: product.uom === 'g' ? 'KG' : product.uom === 'ml' ? 'LITRE' : 'PIECE',
         description: product.description,
@@ -375,6 +383,7 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         ? state.categories.map((item) => (item.id === category.id ? saved : item))
         : [...state.categories, saved],
     }));
+    return saved;
   },
   deleteCategory: async (id) => {
     await api(`/api/categories/${id}`, { method: 'DELETE' });
@@ -418,34 +427,53 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
 
   saveCoupon: async (coupon) => {
     const promotion = coupon.promoType !== 'manual';
-    const numericId = coupon.id.replace('promotion-', '');
-    const existing = promotion
-      ? get().coupons.some((item) => item.id === coupon.id)
-      : get().coupons.some((item) => item.id === coupon.id);
+    const existing = get().coupons.some((item) => item.id === coupon.id);
     if (promotion) {
-      await api(existing ? `/api/promotions/${numericId}` : '/api/promotions', {
+      const numericId = coupon.id.replace('promotion-', '');
+      const generatedName =
+        coupon.code.trim() ||
+        (coupon.promoType === 'auto_product'
+          ? `AUTO_PRODUCT_${coupon.productId}`
+          : `AUTO_ORDER_${coupon.orderThreshold}`);
+      const dto = await api<PromotionDto>(existing ? `/api/promotions/${numericId}` : '/api/promotions', {
         method: existing ? 'PUT' : 'POST',
         body: JSON.stringify({
-          name: coupon.code,
-          appliesTo: coupon.applyTo === 'product' ? 'PRODUCT' : 'ORDER',
-          productId: coupon.productId ? Number(coupon.productId) : null,
-          minQuantity: coupon.minQty,
-          minOrderAmount: coupon.orderThreshold,
+          name: generatedName,
+          appliesTo: coupon.promoType === 'auto_product' ? 'PRODUCT' : 'ORDER',
+          productId: coupon.promoType === 'auto_product' && coupon.productId
+            ? Number(coupon.productId)
+            : null,
+          minQuantity: coupon.promoType === 'auto_product' ? coupon.minQty : null,
+          minOrderAmount: coupon.promoType === 'auto_order' ? coupon.orderThreshold : null,
           discountType: coupon.type === 'percent' ? 'PERCENTAGE' : 'FIXED',
           discountValue: coupon.value,
+          active: coupon.active,
         }),
       });
+      const saved = promotionFromDto(dto);
+      set((state) => ({
+        coupons: existing
+          ? state.coupons.map((item) => (item.id === coupon.id ? saved : item))
+          : [...state.coupons, saved],
+      }));
     } else {
-      await api(existing ? `/api/coupons/${coupon.id}` : '/api/coupons', {
+      const dto = await api<CouponDto>(existing ? `/api/coupons/${coupon.id}` : '/api/coupons', {
         method: existing ? 'PUT' : 'POST',
         body: JSON.stringify({
           code: coupon.code,
           discountType: coupon.type === 'percent' ? 'PERCENTAGE' : 'FIXED',
           discountValue: coupon.value,
+          minOrderAmount: coupon.minOrder,
+          active: coupon.active,
         }),
       });
+      const saved = couponFromDto(dto);
+      set((state) => ({
+        coupons: existing
+          ? state.coupons.map((item) => (item.id === coupon.id ? saved : item))
+          : [...state.coupons, saved],
+      }));
     }
-    await get().hydrate();
   },
   deleteCoupon: async (id) => {
     const promotion = id.startsWith('promotion-');
@@ -491,7 +519,16 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
       method: 'POST',
       body: JSON.stringify({ name }),
     });
-    set((state) => ({ floors: [...state.floors, { id: String(dto.id), name: dto.name }] }));
+    const floor = { id: String(dto.id), name: dto.name };
+    set((state) => ({ floors: [...state.floors, floor] }));
+    return floor;
+  },
+  deleteFloor: async (id) => {
+    await api(`/api/floors/${id}`, { method: 'DELETE' });
+    set((state) => ({
+      floors: state.floors.filter((floor) => floor.id !== id),
+      tables: state.tables.filter((table) => table.floorId !== id),
+    }));
   },
 
   savePaymentMethod: async (method) => {

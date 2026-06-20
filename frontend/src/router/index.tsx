@@ -59,7 +59,7 @@ export function AppRouter() {
         <Route path="tables" element={<TablesView />} />
       </Route>
 
-      <Route path="/kds" element={<ProtectedRoute><KDSPage /></ProtectedRoute>} />
+      <Route path="/kds" element={<KDSPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
       <Route path="/s/:token" element={<SelfOrderPortal />} />
 

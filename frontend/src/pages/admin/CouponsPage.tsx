@@ -15,6 +15,7 @@ export function CouponsPage() {
   const [draft, setDraft] = useState<Coupon>(blank);
   const [editing, setEditing] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const openNew = () => {
     setDraft({ ...blank, id: `cp-${Date.now()}` });
@@ -26,9 +27,17 @@ export function CouponsPage() {
     setEditing(true);
     setDrawerOpen(true);
   };
-  const save = () => {
-    if (draft.promoType === 'manual' && (!draft.code.trim() || draft.value <= 0)) {
-      toast.error('Code and value are required.');
+  const save = async () => {
+    if (draft.value <= 0) {
+      toast.error('Discount value is required.');
+      return;
+    }
+    if (draft.type === 'percent' && draft.value > 100) {
+      toast.error('Percentage discount cannot exceed 100%.');
+      return;
+    }
+    if (draft.promoType === 'manual' && !draft.code.trim()) {
+      toast.error('Coupon code is required.');
       return;
     }
     if (draft.promoType === 'auto_product' && !draft.productId) {
@@ -39,9 +48,24 @@ export function CouponsPage() {
       toast.error('Order threshold is required for order-based promotion.');
       return;
     }
-    saveCoupon(draft);
-    toast.success(editing ? 'Updated.' : 'Created.');
-    setDrawerOpen(false);
+    setSaving(true);
+    try {
+      await saveCoupon(draft);
+      toast.success(editing ? 'Updated.' : 'Created.');
+      setDrawerOpen(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to save coupon.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleActive = async (coupon: Coupon) => {
+    try {
+      await saveCoupon({ ...coupon, active: !coupon.active });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Unable to update coupon.');
+    }
   };
 
   const activePrograms = coupons.filter((c) => c.active);
@@ -67,7 +91,7 @@ export function CouponsPage() {
           <input
             type="checkbox"
             checked={c.active}
-            onChange={() => saveCoupon({ ...c, active: !c.active })}
+            onChange={() => void toggleActive(c)}
             className="accent-[#00754A]"
           />
           <span className={`text-[14px] tracking-[0.18em] uppercase font-extralight ${c.active ? 'text-paid' : 'text-text-faint'}`}>
@@ -143,7 +167,9 @@ export function CouponsPage() {
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setDrawerOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={save}>{editing ? 'Save' : 'Create'}</Button>
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : editing ? 'Save' : 'Create'}
+            </Button>
           </>
         }
       >
